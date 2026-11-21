@@ -1,3 +1,4 @@
+/kernel/
 /dist/
 __pycache__/
 *~
@@ -6,3 +7,9 @@ __pycache__/
 *.efi
 usb-payload.bin
 !fw-gpu/**
+!fw-audio/**
+!fw-bt/**
+!fw-wifi/peach/**
+!fw-wifi/combined20.bin
+
+fw-wifi/network

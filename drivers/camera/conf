@@ -1,0 +1,22 @@
+# devices/dodge/drivers/camera/conf: the camera subsystem's additions of this phone (docs/drivers-config.md).
+# The torch is a rewrite of the common driver (patches/xnu-dodge.patch, the common TORCH symbol);
+# the Iris video decode unit is this phone's own.
+
+driver RPMH
+	file    bsd/dev/hakios.rpmh.c
+	file    bsd/dev/hakios.rpmh.h
+	help    the RPMh transport (regulator and ARC votes) through the apps RSC at 0x16520000:
+	help    the WCD9395 codec's supplies (the microphones'), the camera pipeline's rails, the
+	help    torch's -- whoever needs a vote the firmware will hold
+
+driver IRIS
+	file    bsd/dev/hakios.iris.c
+	file    bsd/dev/hakios.iris_hfi.c
+	file    bsd/dev/hakios.iris_hw.c
+	file    bsd/dev/hakios.iris_private.h
+	file    bsd/dev/hakios.iris_ioctl.h
+	file    bsd/dev/hakios.iris_buffers.inc
+	help    the Iris VPU v3.5's H.264/HEVC hardware decode (/dev/hakios-iris; the PAS image and
+	help    the apps-smmu context brought up lazily on ioctl); the VideoToolbox plugin in user space
+	help    registers avc1/hvc1/hev1 on top of it. Written from the vendor's driver; not yet run
+	help    on this phone, so it stays out of the configuration until it is

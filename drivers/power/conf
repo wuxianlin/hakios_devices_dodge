@@ -1,0 +1,12 @@
+# devices/dodge/drivers/power/conf: the battery of this phone (docs/drivers-config.md). The common
+# battery driver is a rewrite (patches/xnu-dodge.patch, the common BATTERY symbol); the transport
+# through the audio DSP is this phone's own.
+
+driver BATTERY_ADSP
+	file    bsd/dev/hakios.battery_adsp.c
+	file    bsd/dev/hakios.battery_dsp.c
+	file    bsd/dev/hakios.battery_wire.h
+	file    bsd/dev/hakios.battery_dsp.h
+	help    the battery's level, health and charging state through the audio DSP's GLINK service
+	help    (batt_dsp=4; batt_dsp_wait=N holds the bring-up N seconds in, usb_live=1 says the USB
+	help    profile). The DSP itself is the common audio driver's (adsp=1 adsp_adopt=1)

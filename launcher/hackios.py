@@ -107,8 +107,38 @@ def device_args():
         return ''
     return ' '.join(l.split('#', 1)[0].strip() for l in open(p)).strip()
 
+def wifi():
+    """the WCN7850's bring-up in the loader: the staged sequence the port's own rounds run
+    (map, rails, clocks, link+survey, the firmware download over MHI, the QMI rounds,
+    transfer-prepare). The kernel adopts the lease this leaves; without it there is no
+    Wi-Fi. Skipped when combined20.bin is not beside this script."""
+    fw = os.path.join(HERE, 'combined20.bin')
+    if not os.path.isfile(fw):
+        print('no combined20.bin beside this script: the Wi-Fi bring-up is skipped')
+        return
+    print('the Wi-Fi bring-up (map, rails, clocks, link)...')
+    for step in ('map', 'rails', 'clocks'):
+        'OKAY' in fb('oem', f'op13-wifi-{step}', timeout=60) or die(f'op13-wifi-{step} failed')
+    ok = False
+    for _ in range(3):
+        ok = 'OKAY' in fb('oem', 'op13-wifi-link', timeout=120)
+        if ok:
+            break
+    ok or die('op13-wifi-link failed (the survey never came up)')
+    print('staging the firmware and downloading it over MHI (a minute or two)...')
+    'OKAY' in fb('stage', fw, timeout=600) or die('staging combined20.bin failed')
+    for n in (9, 8, 6):
+        'OKAY' in fb('oem', 'op13-wifi-smmu', str(n), timeout=90) or die(f'op13-wifi-smmu {n} failed')
+    fb('oem', 'op13-wifi-smmu', '7', timeout=900)          # the firmware download itself
+    for n in (2, 1, 3):
+        'OKAY' in fb('oem', 'op13-wifi-smmu', str(n), timeout=120) or die(f'op13-wifi QMI {n} failed')
+    fb('oem', 'op13-wifi-smmu', '0', timeout=300)          # the file rounds
+    fb('oem', 'op13-wifi-transfer-prepare', timeout=120) or None
+    print('the WCN7850 is up; the lease is ready for the kernel to adopt')
+
 def run():
     enter()
+    wifi()
     kern = os.path.join(HERE, 'kernel.bin')
     os.path.isfile(kern) or die('kernel.bin not next to this script')
     secs = os.environ.get('SECS', '900')

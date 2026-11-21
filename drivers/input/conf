@@ -1,12 +1,23 @@
-# devices/dodge/drivers/input/conf: the input drivers of this phone (docs/drivers-config.md).
-# CONFIG_HAKIOS_<NAME>=y in configs/dodge_defconfig builds one in; tools/hakios-config.py reads this file.
-# The `file` lines are also what the legacy build follows: the file next to this conf is copied
-# to that path in the XNU tree (the .github workflow does it; the names are the tree's own).
+# devices/dodge/drivers/input/conf: the input drivers of this phone (docs/drivers-config.md). The
+# buttons and the input hub are rewrites of the common drivers (patches/xnu-dodge.patch, the common
+# BUTTONS symbol); the touch screen, the panel's brightness and the alert slider are this phone's own.
 
-driver DODGE_TOUCH
-	file    bsd/dev/hakios.dodge_touch.c
-	file    bsd/dev/hakios.dodge_touch_hw.h
-	file    bsd/dev/hakios.dodge_touch_report.h
-	help    the touch screen: a Synaptics S3910 on bit-banged GPIO SPI, TouchCom (synaptics=1). The
-	help    bus, the power chain (PM8550VS GPIO3 through the SPMI write side, ldo.b4 through the RSC)
-	help    and the pins are the OnePlus 13's
+driver SYNAPTICS
+	file    bsd/dev/hakios.synaptics.c
+	help    the touch screen: a Synaptics S3910 on bit-banged GPIO SPI, TouchCom (synaptics=1);
+	help    provides the common touch slot (hakios_goodix_init, which the input hub starts). The
+	help    bus, the power chain (PM8550VS GPIO3 through the SPMI write side, ldo.b4 through the
+	help    RSC) and the pins are this phone's. SEEN: tap, drag, multitouch and edge gestures at 125 Hz
+
+driver BRIGHTNESS
+	file    bsd/dev/hakios.brightness.c
+	file    bsd/dev/hakios.brightness_dcs.h
+	help    the panel's own brightness: /dev/brightness, DCS51 to the panel. The loader votes the
+	help    AHB clock before XNU starts; the agent in user space follows iOS's brightness
+
+driver SLIDER
+	file    bsd/dev/hakios.slider.c
+	file    bsd/dev/hakios.slider_i2c.h
+	file    bsd/dev/hakios.slider_position.h
+	help    the alert slider's three positions through the PMIC's accelerometer pole (slider=1;
+	help    slider_cal= carries this unit's calibration, tools/slider-cal.py measures it)

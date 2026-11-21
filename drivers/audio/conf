@@ -1,0 +1,10 @@
+# devices/dodge/drivers/audio/conf: this phone's addition to the common audio drivers (docs/drivers-config.md).
+# The common drivers themselves -- hakios.adsp.c (the DSP's staged bring-up, the GLINK bridge the
+# battery also rides), hakios.sound.c, hakios.speaker.c -- are this port's rewrites of the reference
+# phone's: carried by patches/xnu-dodge.patch and built by the common symbols (ADSP, SOUND, SPEAKER).
+
+driver APM_GRAPH
+	file    bsd/dev/hakios.apm.graph.c
+	help    the APM graph protocol's builder: the AudioReach packets and parameter blocks the audio
+	help    DSP is told its graph with -- the six-module chain (write-shared-heap, decoder,
+	help    converter, volume, format-converter, log, i2s sink) the speakers play through

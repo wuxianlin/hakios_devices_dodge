@@ -1,0 +1,14 @@
+# devices/dodge/drivers/bluetooth/conf: Bluetooth over PCIe (docs/drivers-config.md). The common
+# kernel's own BT (the reference phone's WCN6750 pin probe, hakios.bt.c) stays out of this phone's
+# configuration; this driver takes the Bluetooth slot in its place.
+
+driver BT_PCIE
+	file    bsd/dev/hakios.bt_hci.c
+	file    bsd/dev/hakios.bt_uart.c
+	file    bsd/dev/hakios.bt_ios.c
+	file    bsd/dev/hakios.bt_probe.c
+	file    bsd/dev/hakios.bt_private.h
+	file    iokit/Kernel/hakios.bt_iokit.cpp iokitcpp
+	help    the WCN7850's Bluetooth half over PCIe (bt=4 for the full stack to iOS's Bluetooth
+	help    preferences; pcie_bt_en=1 drives BT_EN first, firmware hmtnv*/hmtbtfw* from fw-bt).
+	help    SEEN on the phone: scan, pairing, A2DP audio out

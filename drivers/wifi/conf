@@ -1,10 +1,18 @@
-# devices/dodge/drivers/wifi/conf: the Wi-Fi drivers of this phone (docs/drivers-config.md).
-# CONFIG_HAKIOS_<NAME>=y in configs/dodge_defconfig builds one in; tools/hakios-config.py reads this file.
-# The `file` lines are also what the legacy build follows: the file next to this conf is copied
-# to that path in the XNU tree (the .github workflow does it; the names are the tree's own).
+# devices/dodge/drivers/wifi/conf: this phone's Wi-Fi support files (docs/drivers-config.md). The
+# network itself is the common Wi-Fi driver, rewritten for the WCN7850 (patches/xnu-dodge.patch,
+# the common WIFI symbol); what is here is the MHI state the loader's bring-up leaves, adopted.
 
-driver WCN
-	file    bsd/dev/hakios.wcn.c
-	help    the WCN7850 radio's PCIe bring-up, in stages (wifi_pcie=N: 1 read-only probe, 2 WLAN_EN and
-	help    the GDSCs, ... 7 the endpoint's config space); also probes the CPUCP's SCMI mailbox, the way
-	help    in to the clock controller this VM's gcc window is filtered. Not a network driver: bring-up only
+driver MHI
+	file    bsd/dev/hakios.mhi.c
+	file    bsd/dev/hakios.mhi_transport.c
+	file    bsd/dev/hakios.mhi_host.h
+	file    bsd/dev/hakios.mhi_handoff.h
+	file    bsd/dev/hakios.mhi_mmio.h
+	file    bsd/dev/hakios.mhi_qrtr.h
+	file    bsd/dev/hakios.mhi_qrtr.inc
+	file    bsd/dev/hakios.mhi_wake.h
+	file    bsd/dev/hakios.mhi_window.h
+	file    bsd/dev/hakios.mhi_wire.h
+	help    the WCN7850 radio's MHI state, adopted from the loader's bring-up: the reserved DMA
+	help    lease the UEFI handoff leaves (touch_lease_pa=), its rings polled, the QRTR and WLFW
+	help    capabilities verified -- no PCIe reset, SMMU remap or firmware bootstrap in the kernel

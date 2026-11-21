@@ -1,106 +1,81 @@
-# Device: OnePlus 13 (dodge)
+# HakiOS for the OnePlus 13 (dodge)
 
-Qualcomm SM8750 ("sun", Snapdragon 8 Elite). Made by `tools/new-device.py` on 2026-10-29 from the
-phone's own device tree (`live.dtb`, pulled from its Android), then edited as the port went; this
-repository carries what is true of this phone and of its SoC family and of no other
-([docs/porting/repositories.md](https://github.com/oosexgang/hakios/blob/main/docs/porting/repositories.md)).
+A [HakiOS](https://github.com/oosexgang/hakios-xnu-kernel) device repository: everything the
+OnePlus 13 (dodge, Qualcomm SM8750 "sun", Snapdragon 8 Elite) needs to boot and run unmodified
+iOS 16.5 — its own kernel drivers, its SoC family's layer, its UEFI platform, its firmware, and
+two patches against the common repository. Nothing is flashed: the system boots over `fastboot
+boot` and lives in RAM.
 
-| What | Value |
-|---|---|
-| Board (the tree's `model`) | Qualcomm Technologies, Inc. Sun MTP,dodge |
-| Compatible | `qcom,sun-mtp qcom,sun qcom,sunp-mtp qcom,sunp qcom,mtp` |
-| SoC layer | `soc/` (sun) |
-| Drivers of its own | `drivers/input/hakios.dodge_touch.c` (Synaptics S3910), `drivers/wifi/hakios.wcn.c` (WCN7850 PCIe bring-up) |
+Built against the common repository at `main` (pinned revision in `apply-kernel-patches.sh`),
+which this repository does not modify beyond what `patches/` carries. `tools/hakios-device.py
+sync` in the common tree clones this into `devices/dodge/`.
 
-## What works (seen on the phone, October 2026)
+## Status
 
-A run reaches SpringBoard on the GPU (Adreno 830, the 23-stage bring-up and the RedwoodGPU
-service, Mesa rendering), with the touch screen, all three buttons; the audio DSP's PAS
-bring-up steps and the WCN7850's read-only PCIe probe also run. What is not brought up yet:
-sound out, Wi-Fi as a network, UFS storage, modem, cameras, haptic, thermal. The full story of
-the touch panel alone (SPMI writes, RPMh votes through the RSC, GPIO bit-bang SPI, the
-TouchCom protocol) is in the head of [drivers/input/hakios.dodge_touch.c](drivers/input/hakios.dodge_touch.c).
+Seen working on the phone, November 2026 (one line per area, the same words as `device.conf`):
 
-`configs/dodge.config` is the record: what is built in, and every boot-argument of the working
-runs. Four cores (`cpus=4`) is the proven boot; all eight have been booted (`cpus=8`) too.
-The GPU needs its whole argument set together (`touchscreen=0 wfi=0 wfe_mode=0` are required
-alongside the `adreno8` set by the ARC clock votes of the kernel's adreno8_rpmh.c), a cold
-Android settle before the run, the GPU firmware of `fw-gpu/`, and the GL system and root
-images (Mesa) -- the plain root stops at init's self checks.
-
-**The SCM waitqueue protocol is reverted in this port's patch** (patches/xnu-dodge.patch carries the
-adsp driver without it): the polling GET_WQ_CTX/WAITQ_RESUME loop that the audio DSP's long calls
-want deadlocks the adreno8 secure handover -- every run that passed GPU step 5 hung the whole
-kernel. Until it is implemented bounded, the audio DSP's bring-up arguments stay staged and
-the adsp driver out of the boot.
-
-## The SoC addresses (`soc.args`)
-
-Read out of the tree by `tools/soc-args.py` and **hand-corrected**: the tool was written for the
-SC7280's tree, and on this one it misses six values. What it missed, and where each really is in
-the tree (all verified against `live.dtb`):
-
-| Argument | Value | Where in the tree |
+| Area | State | Notes |
 |---|---|---|
-| `soc_aoss` | `0xc300000` | `/soc/power-controller@c300000`, compatible `qcom,aoss-qmp` -- no SoC name in it, which the tool's matcher requires |
-| `soc_cmd_db` | `0x81c60000` | `/reserved-memory/aop_cmd_db_region@81c60000` -- the node is named `aop_cmd_db_region`, not the `cmd_db` the tool looks for |
-| `soc_mpss_mem` | `0x8ba00000` | `/reserved-memory/mpss_region@8ba00000` (`mpss_region`, not `mpss`) |
-| `modem_ipa_fw_at` | `0x9b090000` | `/reserved-memory/ipa_gsi_region@9b090000` (`ipa_gsi_region`, not `ipa_gsi`) |
-| `soc_smem` | `0x81d00000` | `/reserved-memory/smem_region@81d00000`: this tree has no `/soc/qcom,smem` node whose `memory-region` the tool follows |
-| `soc_pas_mpss` | -- | **not derivable**: `/soc/remoteproc-mss@04080000` (`qcom,sun-modem-pas`) carries no `qcom,pas-id`; find the PAS id in the vendor kernel before the modem is brought up |
+| Display | **Works** | The loader's framebuffer; the panel's own brightness over DSI (`/dev/brightness`, DCS51, the user-space agent) |
+| Touch | **Works** | Synaptics S3910 on bit-banged GPIO SPI, TouchCom: multitouch, edge gestures, 125 Hz (`synaptics=1`) |
+| Buttons | **Works** | Power from the PON, volume from PM8550VS GPIO6 through the SPMI write side (`buttons_pin=0x18d buttons_swap=1`) |
+| Audio | **Works** | The audio DSP adopted, the AudioReach graph, both AW88230 amplifiers, true stereo; iOS's software volume (`adsp=1 sound=4`) |
+| Wi-Fi | **Works** | The WCN7850 brought up in the loader over MHI, the lease adopted by the kernel, a network joined over DHCP (`wifi=1`) |
+| Bluetooth | **Works** | Over PCIe: scan, pairing, A2DP (`bt=4 pcie_bt_en=1`) |
+| Battery | **Works** | Level, health and charging state through the audio DSP's GLINK (`batt_dsp=4`) |
+| GPU | **Works** | Adreno 830: hardware GL through Mesa, SpringBoard and the frosted wallpaper (`adreno8=23 gl=1`) |
+| Alert slider | **Works** | The three positions through the PMIC's accelerometer pole (`slider=1`) |
+| Torch | **Works** | The flashlight from the camera driver's rails (`torch=3`) |
+| CPU | Partial | Four cores by default (the proven boot); all eight have been booted (`cpus=8`) |
+| Sensors | Partial | The alert slider; no others yet |
+| Storage | Missing | UFS not brought up; the system runs from RAM |
+| Camera | Partial | The video half works: the Iris VPU decodes H.264/HEVC (PAS 9, HFI Gen2, the VideoToolbox plugin); the still camera itself (the ISP pipeline, the sensors) is not brought up |
+| Cellular | Missing | The modem is not started; `soc.args` carries the IPA addresses for when it is |
+| Haptic | **Works** | The PMIH010x hv-haptics block over SPMI: iOS Actuator waveforms played directly (`haptic=4`), this phone's motor (7692 us, 2400 mV) |
+| Thermal, network | Missing | Not started |
 
-`pull-soc.sh` regenerates `soc.args` from the phone on adb (and would drop the hand corrections:
-re-apply them, or teach `tools/soc-args.py` the names above). The run scripts add the lines that
-differ from the kernel's built-in defaults to the command line (`tools/soc-only-changes.sh`).
+## How it is put together
 
-The audio DSP's own addresses (shared memory, DSP memory, command database, sequencer, IPCC) are
-NOT in `soc.args` -- the modem's arguments are -- but in `configs/dodge.config` as the staged
-`adsp_*` boot-arguments of the proven bring-up: `adsp_smem=0x81d00000 adsp_smem_size=0x200000
-adsp_mem=0x9ee00000 adsp_size=0x5080000 adsp_cmddb=0x81c60000 adsp_rsc=0x16520000
-adsp_ipcc=0x406000`, all of them straight out of the same tree (`smem_region`,
-`adspslpi_region@9ee00000` 0x5080000 bytes, `aop_cmd_db_region`, `rsc@16500000` drv-2,
-`qcom,ipcc@406000`).
+| What | Where |
+|---|---|
+| The common tree's rewrites (the audio DSP, the Wi-Fi core, the input hub, the battery, the torch, the stubs' guards, the XNU overlay files) | `patches/xnu-dodge.patch` |
+| The loader's bring-up (the WCN7850's MHI, the brightness protocol votes, the platform table), the user space (the brightness agent, bluetool, the flashlight, the VideoToolbox plugin) and the build tools | `patches/kernel-common.patch` |
+| The drivers only this phone has — the Synaptics touch, the DSI brightness, the alert slider, the AudioReach graph builder, the DSP battery, Bluetooth over PCIe, the MHI lease adoption, the Adreno 830 and its GPU service, the Iris video decode — under upstream-style names, found by the tree's own sync ([docs/porting/drivers.md](https://github.com/oosexgang/hakios-xnu-kernel/blob/main/docs/porting/drivers.md)) | `drivers/` |
+| The ath12k station stack, from ios-dodge's port with thanks | `wifi/`; built against [FreeBSD](https://www.freebsd.org)'s LinuxKPI, pulled from FreeBSD's own archive |
+| [Mesa](https://www.mesa3d.org) 26.2.5 with Freedreno: ios-dodge's consolidated patch, with only the GPU service's name adapted at build time; Mesa's tarball from [Mesa's own archive](https://archive.mesa3d.org) | `mesa-files/` |
+| The SoC family's layer (the SM8750's addresses) | `soc/` |
+| UEFI for the phone: a port of [Mu-Silicium](https://github.com/Project-Silicium/Mu-Silicium) | `uefi/` |
+| The phone's firmware, so the CI's package works out of the box; refreshed off the phone by `pull-firmware.sh`, hash-guarded (the ODM board file and regulatory database are never overwritten by the stock ones) | `fw-audio/`, `fw-bt/`, `fw-wifi/`, `fw-gpu/` |
+| Tools: the firmware composer, the board-file matcher, the IPA installer, the slider calibrator | `tools/` |
 
-## Firmware
+The boot is one complete set: every run boots the resident system image with `root.apfs` as its
+RAM disk. The CI's package runs with one command (`launcher/run.sh`), the WCN7850's loader
+bring-up included.
 
-`pull-firmware.sh` pulls the audio DSP's signed images off the phone (with root: they are
-unreadable by the shell user): `fw-audio/` = `adsp.mdt` + `adsp.b00..b36`, and the SM8750's
-`adsp_dtb.*` (the DSP's own device tree, its own PAS image, which TrustZone starts first), plus
-`cdsp.*`/`cdsp_dtb.*` as the cross-check of the release (`adsp_fw=cdsp`). Never committed.
-
-## Running it on the phone
-
-From the common repository (the UEFI pieces come from the Mu-Silicium tree beside it, symlinked in;
-every piece of the boot image is overridable -- the env below is this phone's):
+## Building
 
 ```sh
-export UEFI_FD=$PWD/Mu-Silicium/Build/dodgePkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd
-export DTB=$PWD/Mu-Silicium/Resources/DTBs/dodge.dtb
-export FD_BASE=0xA7100000 FD_SIZE=0x300000 PAYLOAD_BASE=0xF0000000 BOOT_HEADER=4
-make dodge_defconfig && make config && make kernel -j8 && make loader
-SOC_ARGS= make phone SECS=600
+./apply-kernel-patches.sh          # the pristine upstream + the two patches + this repository's layers
+docker/build.sh                    # the kernel inside the build container (loader too: docker/build.sh loader)
+IPSW=<iOS 16.5's ipsw> ./build.sh  # the images + the bootable package; IPSW= only the first time
 ```
 
-`make phone` takes this device's arguments from the .config (`tools/hakios-config.py args`; the
-proven set: `cpus=4 buttons=1 buttons_pin=0x18d buttons_swap=1 synaptics=1 touchscreen=0
-wfi=0 wfe_mode=0 adreno8=23 adreno8_keep=1 adreno8_return=0 adreno8_gmuclk=2
-adreno8_secure_preflight=4`) and builds `xnu-usb.img` with the env above. **`SOC_ARGS=` matters**:
-the modem's `soc_*` arguments of `soc.args` are dormant in this configuration (MODEM is left
-out) and with them the kernel's command line overflows and loses its tail; drop them until the
-modem is brought up, when they are what `soc.args` is for.
+The CI ([.github/workflows/build.yml](.github/workflows/build.yml)) does the same from a bare
+runner — the pristine clone, the two patches, the same checks the tree gives (`hakios-device.py
+check`, `drivers-check.py`, `boot-args.py --check`), the kernel, the loader, UEFI, the system
+image, and one zip in the artifact. The IPSW is yours (Apple's licence); firmware comes from
+your phone.
 
-## The three changes this phone needed outside this repository
+## Running
 
-Kept as commits on the fork of the common repository (see its `LOCAL-CHANGES.md`):
+From the common repository's top: `./xl enter`, `./xl ramdisk`, `./xl run`; or the one-command
+`run-linux.sh` / `run-windows.bat` here; or the CI zip's `launcher/run.sh` with only
+`platform-tools` beside it. `fastboot boot` only — nothing is flashed.
 
-1. `drivers/input/hakios.buttons.c` -- the version-7 PMIC arbiter layout of the SM8750 (its own
-   core/table/observer addresses, up to 1024 APIDs) and the pin-setup writes for the volume keys;
-2. `drivers/audio/hakios.adsp.c` -- the staged bring-up arguments (`adsp_*`), the RSC's
-   version-3 command layout, the DSP's second signed image, the page-at-a-time shared-memory
-   access, and the interrupt-storm avoidances;
-3. `xnuloader/loader.c` -- `platform_dodge`: the SM8750's core map (no uniform MPIDR shift) and
-   the twice-as-wide GIC redistributor stride, patched into the kernel while it loads.
+## Acknowledgements
 
-## Check
-
-`tools/hakios-device.py check dodge` (from the common repository).
+- [HakiOS](https://github.com/oosexgang/hakios-xnu-kernel) -- the common repository this port is built on
+- [ios-dodge](https://github.com/faridbtw/ios-dodge) -- the Mesa GLES patch, the ath12k stack, the MHI lease model
+- [hackios-redmi-k90-annibale](https://github.com/iola1999/hackios-redmi-k90-annibale) -- the same-SoC sibling port (SM8750)
+- [Project Silicium](https://github.com/Project-Silicium/Mu-Silicium) -- the UEFI implementation
+- [Mesa](https://www.mesa3d.org) and [FreeBSD](https://www.freebsd.org) -- the GL and the LinuxKPI
