@@ -251,6 +251,10 @@ jobs:
             || { echo '--- root.apfs has no injection libraries: the image is incomplete'; exit 1; }
           strings userland/root.apfs | grep -q libhakios.gl.dylib \
             || { echo '--- root.apfs has no GL library: the image is incomplete'; exit 1; }
+          # bluetool: BlueTool's replacement in the small image, without which bluetoothd is never driven
+          # (the CI's clean tree shipped without it once: its copy waited on a file only an earlier build left)
+          strings userland/root.apfs | grep -q bluetool \
+            || { echo '--- root.apfs has no bluetool: bluetoothd would never be driven'; exit 1; }
 
       - name: save the Mesa build (cache)
         uses: actions/cache/save@v4

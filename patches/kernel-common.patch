@@ -344,7 +344,7 @@ index 68decaa..124b5e4 100755
                  lines.append("%-40s optional %s" % (path, " ".join([d.tag] + tags)))
      return lines + [FILES_END]
 diff --git a/userland/build.sh b/userland/build.sh
-index c604123..7c17aa4 100755
+index c604123..b8147a9 100755
 --- a/userland/build.sh
 +++ b/userland/build.sh
 @@ -104,6 +104,11 @@ for d in rootfs cryptex cryptex-app; do
@@ -385,20 +385,11 @@ index c604123..7c17aa4 100755
  /redwood/lib/libhakios.app.dylib Sileo
  /redwood/lib/libhakios.tweaks.dylib Preferences"}
  mkdir -p obj
-@@ -163,7 +180,40 @@ fi
+@@ -163,7 +180,41 @@ fi
  rm -rf root
  mkdir -p root/sbin root/bin root/etc root/share root/LaunchDaemons
  cp obj/init root/sbin/init
 -cp obj/child root/bin/child
-+	# BlueTool's replacement: into the small image's sbin (both images' /redwood/sbin), where our
-+	# own programs run without the platform-binary signature the system's own paths demand; the
-+	# job plist points here (mkjobs.py). Ad-hoc signed (tools/adhoc-sign.py): the kernel's
-+	# mini-AMFI takes an ad-hoc signature for a platform binary, and launchd refuses a daemon
-+	# that is not one. Stock /usr/sbin/BlueTool is left as it is, unasked.
-+	if [ -f obj/bluetool ] && [ "${BLUETOOTH-1}" != 0 ]; then
-+		python3 ../tools/adhoc-sign.py obj/bluetool
-+		cp obj/bluetool root/sbin/bluetool
-+	fi
 +	# the screen-brightness agent (ios-dodge's brightness.c): the system's own brightness read
 +	# from BackBoardServices, written to the kernel's /dev/brightness; rc.jobs runs it backgrounded.
 +	# Built right here if not already: the image must carry it even on the first build after a
@@ -413,9 +404,19 @@ index c604123..7c17aa4 100755
 +	# job plist points here (mkjobs.py). Stock /usr/sbin/BlueTool is left as it is, unasked.
 +	# Ad-hoc signed (tools/adhoc-sign.py, what ldid -S writes): the kernel's mini-AMFI takes an
 +	# ad-hoc signature for a platform binary, and launchd refuses a daemon that is not one.
-+	if [ -f obj/bluetool ] && [ "${BLUETOOTH-1}" != 0 ]; then
-+		python3 ../tools/adhoc-sign.py obj/bluetool
-+		cp obj/bluetool root/sbin/bluetool
++	# Built right here if an earlier build did not leave it, as the agent above is: its compile is
++	# in a later section, and a copy that waited on the file found the CI's clean tree without it
++	# -- the image shipped with no bluetool, and bluetoothd was never driven.
++	if [ "${BLUETOOTH-1}" != 0 ]; then
++		if [ ! -f obj/bluetool ] && [ -d $DARWIN/rootfs/usr/lib ]; then
++			$DYN -fblocks -framework Foundation -o obj/bluetool src/bluetool.c
++		fi
++		if [ -f obj/bluetool ]; then
++			python3 ../tools/adhoc-sign.py obj/bluetool
++			cp obj/bluetool root/sbin/bluetool
++		else
++			echo "build.sh: no bluetool for the small image (no Darwin tree, or its compile failed): bluetoothd will not be driven"
++		fi
 +	fi
 +	# the control of the signer: hello_dyn is known to run; signed, it has to run the same
 +	if [ -f obj/hello_dyn ]; then
@@ -427,7 +428,7 @@ index c604123..7c17aa4 100755
  # The data volume into the flash and back (src/var_store.c), and the job that saves it when a run
  # ends: the program and its job together, away from the Darwin job list below, which several working
  # copies are editing at once.
-@@ -240,6 +290,10 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -240,6 +291,10 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  		# our library for inside stock Darwin programs (the jobs in INJECT are started with it)
  		$DYN -dynamiclib -install_name /redwood/lib/libhakios.dylib -framework CoreFoundation -framework IOKit -lobjc \
  			-o obj/libhakios.dylib src/inject.c
@@ -438,7 +439,7 @@ index c604123..7c17aa4 100755
  		$DYN -dynamiclib -install_name /redwood/lib/libhakios.sb.dylib -framework CoreFoundation -framework CoreGraphics -framework IOKit -framework IOSurface -lobjc \
  			-o obj/libhakios.sb.dylib src/inject_sb.c
  		# ... the tweak loader of the package manager's prefix (src/inject_tweaks.c): it goes into a
-@@ -252,8 +306,15 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -252,8 +307,15 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  		$DYN -O2 -dynamiclib -install_name /redwood/lib/libhakios.media.dylib -framework CoreFoundation -framework CoreMedia \
  			-framework CoreVideo -framework IOSurface -lobjc \
  			-o obj/libhakios.media.dylib src/inject_media.c src/camera_device.c src/camera_isp.c
@@ -454,7 +455,7 @@ index c604123..7c17aa4 100755
  		# the plug-in Metal loads when the kernel names it (boot-arg metal=1): a device, its buffers and the libraries it reads
  		# (src/HakiosMetal.m, src/hakios_metallib.c; tools/metal-plugin-test.sh tries the same objects on a Mac)
  		# With hakios-metal (hakios-metal/ in this tree, `make ios` in it; or one beside this tree, or at HAKIOS_METAL=): buffers in
-@@ -303,7 +364,7 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -303,7 +365,7 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  				M2V_OBJS="../xnu-deps/build/m2v/out/frontend.o ../xnu-deps/build/m2v/out/libadreno_metal_bridge.a -framework CoreFoundation -lc++ -Wl,-dead_strip"
  				echo "build.sh: with UniXNU's Metal on Vulkan (metal_m2v=1)"
  			fi
@@ -463,7 +464,7 @@ index c604123..7c17aa4 100755
  				-I$HM/include -o obj/HakiosMetal src/HakiosMetalCA.m $METAL_GPU $M2V_OBJS
  		else
  		$DYN -bundle -framework Foundation -framework Metal -lobjc -I$METAL_SRC -o obj/HakiosMetal $METAL_SRC/HakiosMetal.m \
-@@ -313,8 +374,13 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -313,8 +375,13 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  			# the OpenGL ES library, and the table of functions that hands CoreAnimation's calls to it
  			# (Mesa says beside the library what it was built from: one from other patches is built again)
  			M=../xnu-deps/build/mesa/out
@@ -478,7 +479,7 @@ index c604123..7c17aa4 100755
  			./mkeagl.py src/eagl_slots.txt $M/gl.xml $M/exported-gl.txt src/eagl.c > obj/eagl_gen.h
  			$DYN -dynamiclib -install_name /redwood/lib/libhakios.gl.dylib -Iobj -framework CoreFoundation \
  				-framework IOKit -framework IOSurface -lobjc $M/libOSMesa.8.dylib -o obj/libhakios.gl.dylib \
-@@ -372,6 +438,8 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -372,6 +439,8 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  	mkdir -p root/lib
  	cp obj/libhakios.dylib obj/libhakios.sb.dylib root/lib/
  	[ -f obj/libhakios.media.dylib ] && cp obj/libhakios.media.dylib root/lib/     # (as with cpu_test)
@@ -487,7 +488,7 @@ index c604123..7c17aa4 100755
  	[ -f obj/libhakios.app.dylib ] && cp obj/libhakios.app.dylib root/lib/
  	[ -f obj/libhakios.tweaks.dylib ] && cp obj/libhakios.tweaks.dylib root/lib/
  	if [ -f obj/HakiosAudio ]; then
-@@ -465,7 +533,12 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -465,7 +534,12 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  	cp com.hakios.demo.plist com.hakios.wifi.plist root/LaunchDaemons/
  	VOLUME=""
  	[ -n "$FLASHBOOT" ] && [ -f $DARWIN/rootfs.slt ] && VOLUME="--root-volume $DARWIN/rootfs.slt"
@@ -501,7 +502,7 @@ index c604123..7c17aa4 100755
  fi
  # firmware of the phone's own hardware, where somebody has pulled it from the phone's Android into ../fw-gpu
  # (it is the vendor's and never in the repository): the kernel's GPU bring-up, drivers/gpu/hakios.adreno.c, finds it in fw/
-@@ -486,7 +559,41 @@ if [ -f ../fw-wifi/wpss.mdt ]; then
+@@ -486,7 +560,41 @@ if [ -f ../fw-wifi/wpss.mdt ]; then
  	# so not in the repository; it goes where the firmware goes and the kernel reads it there (wifi_join=1)
  	rm -f root/fw/network
  	# SHARE=1: leave it out, for an image that is going to somebody else -- it is a passphrase
@@ -544,7 +545,7 @@ index c604123..7c17aa4 100755
  fi
  # ... and the vibration motor's waveforms, the phone's /vendor/firmware/aw8697_haptic.bin, from ../fw-haptic
  # (drivers/haptic/hakios.haptic.c, haptic=3; 3.6 KB, the vendor's and not in the repository either)
-@@ -513,11 +620,23 @@ for tuned in ../fw-camera/com.qti.tuned.hakios_*.bin; do
+@@ -513,11 +621,23 @@ for tuned in ../fw-camera/com.qti.tuned.hakios_*.bin; do
  	../tools/camtuning.py "$tuned" "root/fw/camera-$sensor.isp" >/dev/null
  done
  # ... and with ADSP=1 the image of the audio DSP, from the same place into ../fw-audio (drivers/audio/hakios.adsp.c):
@@ -571,7 +572,7 @@ index c604123..7c17aa4 100755
  fi
  # Firmware that is not there is otherwise silent at build time and speaks only much later, deep in a
  # device log -- "adreno: THE GPU IS NOT STARTED: the small image has no fw/a660_gmu.bin" cost a phone
-@@ -566,6 +685,10 @@ done
+@@ -566,6 +686,10 @@ done
  python3 ../tools/apfs/mkapfs.py -z --plain fw -o root.apfs redwood=root | tail -1
  [ -z "$CHECK" ] || ../tools/apfs/check-image.sh root.apfs redwood=root
  
@@ -582,7 +583,7 @@ index c604123..7c17aa4 100755
  # --- the RAM part of a boot off the flash: FLASHBOOT=1 -> flashboot.apfs --------------------------------
  # With the Darwin volume on the phone's flash as the root, all that has to come from RAM is what is not
  # on it -- the two cryptexes, OS with the dyld shared cache and App -- and what starts the boot: three
-@@ -671,15 +794,16 @@ if [ -f $DARWIN/system.manifest ] && [ -f $CACHE/dyld_shared_cache_arm64 ] &&
+@@ -671,15 +795,16 @@ if [ -f $DARWIN/system.manifest ] && [ -f $CACHE/dyld_shared_cache_arm64 ] &&
  	fi
  	mv sysroot/sbin/launchd sysroot/sbin/launchd.darwin
  	cp obj/stage0 sysroot/sbin/launchd
