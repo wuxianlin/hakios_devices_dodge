@@ -230,10 +230,12 @@ jobs:
           for d in fw-gpu fw-audio fw-bt fw-wifi; do
             [ -d devices/dodge/$d ] && rm -rf $d && cp -r devices/dodge/$d $d
           done
-          # the images, GL required: Mesa 26.2.5 with Freedreno from devices/dodge/mesa-files
-          # (mk-mesa26.sh pulls Mesa's own tarball and ios-dodge's patch does the porting);
-          # the library names are the tree's own (libhakios.*)
-          IMAGE_OPTS="GL=1" make images > /tmp/gl.log 2>&1 \
+          # the images, GL and REST required: GL for Mesa 26.2.5 with Freedreno
+          # (devices/dodge/mesa-files; mk-mesa26.sh pulls Mesa's own tarball and ios-dodge's
+          # patch does the porting); REST for the rest of our programs -- bluetool among them,
+          # without which bluetoothd is never driven and a scan finds nothing
+          # (the library names are the tree's own: libhakios.*)
+          IMAGE_OPTS="GL=1 REST=1" make images > /tmp/gl.log 2>&1 \
             || { echo '--- GL=1 images failed, tail:'; tail -40 /tmp/gl.log; exit 1; }
           # what a broken image would be missing (a disk-full mid-image once shipped green);
           # launchd.darwin is the real Darwin launchd as this tree names it (build.sh:795 renames
