@@ -42,6 +42,15 @@ fi
 cp launcher/hackios.py launcher/run.sh launcher/run.bat "$DIR/"
 chmod +x "$DIR/run.sh"
 
+# the WCN7850's firmware, which the launcher stages for the loader's MHI download:
+# it must sit beside hackios.py or the zip boots without the Wi-Fi bring-up.
+# (fw-wifi/network holds this network's credentials and never ships)
+if [ -f fw-wifi/combined20.bin ]; then
+	cp fw-wifi/combined20.bin "$DIR/"
+else
+	echo "package.sh: no fw-wifi/combined20.bin -- the zip will boot WITHOUT the Wi-Fi bring-up" >&2
+fi
+
 # the device's kernel arguments: the BASE= line of run-linux.sh, the set the phone runs
 python3 - "$DIR/device-args" <<'PYEOF'
 import re, sys
