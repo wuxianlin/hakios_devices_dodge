@@ -15,6 +15,7 @@
 #              tools/compose_combined.py makes fw-wifi/combined20.bin, the image the loader
 #              downloads over MHI, and rewrites the loader's file table (xnuloader/op13_wifi_files.h)
 #   fw-bt/     the Bluetooth firmware (hmtbtfw*, hmtnv*) from /vendor/bt_firmware/image/
+#   fw-video/  the Iris VPU's PAS image (vpu35_4v.mbn): the H.264/HEVC hardware decoder's
 #   fw-gpu/    the Adreno 830's three images (gen80000_*) -- these three are small enough that the
 #              repository carries them; this refreshes them from the phone
 #
@@ -78,6 +79,11 @@ for f in gen80000_aqe.fw gen80000_gmu.bin gen80000_sqe.fw; do
 	adb pull /vendor/firmware/$f fw-gpu/$f >/dev/null 2>&1 || true
 done
 ls fw-gpu
+
+echo "== the Iris VPU's image (the H.264/HEVC hardware decoder's; the one the repository carries)"
+mkdir -p fw-video
+adb pull /vendor/firmware/vpu35_4v.mbn fw-video/vpu35_4v.mbn >/dev/null 2>&1 || true
+ls -la fw-video | tail -1
 
 echo
 echo "next: python3 devices/dodge/tools/compose_combined.py \$PWD   # fw-wifi/combined20.bin + the loader's file table"

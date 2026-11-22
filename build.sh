@@ -24,7 +24,7 @@ echo "== the kernel and the loader"
 "$REPO/docker/build.sh" loader
 
 echo "== the firmware in place"
-for d in fw-gpu fw-audio fw-bt fw-wifi; do
+for d in fw-gpu fw-audio fw-bt fw-wifi fw-video; do
 	[ -d "$REPO/$d" ] && rm -rf "$TREE/$d" && cp -r "$REPO/$d" "$TREE/$d"
 done
 

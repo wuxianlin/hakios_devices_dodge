@@ -45,7 +45,7 @@ Seen working on the phone, November 2026 (one line per area, the same words as `
 | [Mesa](https://www.mesa3d.org) 26.2.5 with Freedreno: ios-dodge's consolidated patch, with only the GPU service's name adapted at build time; Mesa's tarball from [Mesa's own archive](https://archive.mesa3d.org) | `mesa-files/` |
 | The SoC family's layer (the SM8750's addresses) | `soc/` |
 | UEFI for the phone: a port of [Mu-Silicium](https://github.com/Project-Silicium/Mu-Silicium) | `uefi/` |
-| The phone's firmware, so the CI's package works out of the box; refreshed off the phone by `pull-firmware.sh`, hash-guarded (the ODM board file and regulatory database are never overwritten by the stock ones) | `fw-audio/`, `fw-bt/`, `fw-wifi/`, `fw-gpu/` |
+| The phone's firmware, so the CI's package works out of the box; refreshed off the phone by `pull-firmware.sh`, hash-guarded (the ODM board file and regulatory database are never overwritten by the stock ones) | `fw-audio/`, `fw-bt/`, `fw-wifi/`, `fw-gpu/`, `fw-video/` |
 | Tools: the firmware composer, the board-file matcher, the IPA installer, the slider calibrator | `tools/` |
 
 The boot is one complete set: every run boots the resident system image with `root.apfs` as its

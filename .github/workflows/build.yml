@@ -226,8 +226,9 @@ jobs:
           # out of the box (refreshed from the phone by devices/dodge/pull-firmware.sh):
           # the GPU's images (without them the kernel's GPU bring-up stops at its step 9),
           # the audio DSP's (the speakers and the battery's GLINK ride it), the Bluetooth
-          # set, and the WCN7850's (combined20.bin is what the loader's MHI download stages)
-          for d in fw-gpu fw-audio fw-bt fw-wifi; do
+          # set, the WCN7850's (combined20.bin is what the loader's MHI download stages),
+          # and the Iris VPU's (vpu35_4v.mbn: the H.264/HEVC hardware decoder's image)
+          for d in fw-gpu fw-audio fw-bt fw-wifi fw-video; do
             [ -d devices/dodge/$d ] && rm -rf $d && cp -r devices/dodge/$d $d
           done
           # the images, GL and REST required: GL for Mesa 26.2.5 with Freedreno
@@ -244,6 +245,8 @@ jobs:
             || { echo '--- system.apfs has no launchd.darwin: the image is incomplete'; exit 1; }
           strings userland/root.apfs | grep -q gen80000_gmu \
             || { echo '--- root.apfs has no GPU firmware: the image is incomplete'; exit 1; }
+          strings userland/root.apfs | grep -q vpu35_4v \
+            || { echo '--- root.apfs has no VPU firmware (vpu35_4v.mbn): the hardware video decoder would have nothing to load'; exit 1; }
           strings userland/root.apfs | grep -q libhakios.dylib \
             || { echo '--- root.apfs has no injection libraries: the image is incomplete'; exit 1; }
           strings userland/root.apfs | grep -q libhakios.gl.dylib \
