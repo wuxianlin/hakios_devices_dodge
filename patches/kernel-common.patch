@@ -14098,6 +14098,100 @@ index 0000000..1a4ab90
 +  usleep(100000);
 + }
 +}
+diff --git a/userland/src/eagl.c b/userland/src/eagl.c
+index 3c359ee..e897d9c 100644
+--- a/userland/src/eagl.c
++++ b/userland/src/eagl.c
+@@ -242,15 +242,24 @@ struct image {
+ 	GLenum to, internal, format, type;
+ 	uint32_t plane, seed;
+ 	GLsizei width, height;
++	uint64_t seen;                  /* the use that last looked it up (image_new/image_of) */
+ };
+ 
++/* How many textures may stand for IOSurfaces at once. CoreAnimation's window server and each
++ * application's layer tree make more than the old 256 in a few minutes of use (measured: Settings
++ * opened twice filled it, then "-texImageIOSurface: not done" left those layers with no picture --
++ * the black rectangles seen on screen). The entries are small; the ones not in use are taken back
++ * (oldest first) rather than refused. */
++#define IMAGE_TABLE     4096
+ struct eagl {
+ 	void *table[SLOTS];             /* [0] is the context itself: what every entry gets as its first argument */
+ 	id object;                      /* the EAGLContext */
+ 	struct hakios_gl *gl;
+ 	unsigned long api;
+-	struct image images[256];
++	struct image images[IMAGE_TABLE];
+ 	unsigned image_count;
++	uint64_t image_clock;           /* (a use counter for the table's oldest-first take-back) */
++	unsigned taken;                 /* how many times a full table's oldest entry was taken back for a new texture */
+ 	GLuint framebuffer;             /* the one bound */
+ 	GLuint colour;                  /* ... and the texture that is its colour attachment (0: none, or no texture) */
+ 	GLuint reader;                  /* a framebuffer of ours, to read a texture back */
+@@ -522,6 +531,7 @@ image_of(struct eagl *e, GLuint texture)
+ {
+ 	for (unsigned i = 0; i < e->image_count; i++) {
+ 		if (e->images[i].texture == texture) {
++			e->images[i].seen = ++e->image_clock;
+ 			return &e->images[i];
+ 		}
+ 	}
+@@ -535,10 +545,38 @@ image_new(struct eagl *e, GLuint texture, IOSurfaceRef surface)
+ 
+ 	if (image == NULL) {
+ 		if (e->image_count == sizeof(e->images) / sizeof(e->images[0])) {
+-			say("hakios-gl: more textures with IOSurfaces than there is room for\n");
+-			return NULL;
++			/* The least recently used one that is not drawn into this frame: its texture stays
++			 * CoreAnimation's (with whatever was last copied into it); what goes is our record of
++			 * the surface, so the next ask for that texture makes it afresh. */
++			struct image *oldest = NULL;
++
++			for (unsigned i = 0; i < e->image_count; i++) {
++				struct image *candidate = &e->images[i];
++
++				if (candidate->target) {
++					continue;       /* (drawn into: its copy-out needs it this frame) */
++				}
++				if (oldest == NULL || candidate->seen < oldest->seen) {
++					oldest = candidate;
++				}
++			}
++			if (oldest == NULL) {
++				say("hakios-gl: more textures with IOSurfaces than there is room for, and all are draw targets\n");
++				return NULL;
++			}
++			if (oldest->mirror != 0) {
++				glDeleteTextures(1, &oldest->mirror);
++			}
++			CFRelease(oldest->surface);
++			*oldest = e->images[--e->image_count];
++			image = &e->images[e->image_count++];
++			e->taken++;
++			if (e->taken <= 8) {
++				say("hakios-gl: the table of IOSurface textures is full: the oldest one taken back\n");
++			}
++		} else {
++			image = &e->images[e->image_count++];
+ 		}
+-		image = &e->images[e->image_count++];
+ 	} else {
+ 		if (image->mirror != 0) {
+ 			glDeleteTextures(1, &image->mirror);
+@@ -1272,9 +1310,10 @@ frame_end(struct eagl *e, bool finished)
+ 	if (e->frames <= 40 || e->frames % 20 == 0) {
+ 		say("hakios-gl: frame %u: %u GL calls, %u draws, %u triangles, %u clears; %u textures refilled from IOSurfaces "
+ 		    "(%llu KB); %u picture%s copied out, %u drawn in place; %llu us (%llu handing on, %llu waiting, %llu copying "
+-		    "out), %llu before it for the IOSurfaces\n", e->frames, e->calls, e->draws, e->triangles, e->clears, e->uploads,
+-		    e->upload_bytes >> 10, copied, copied == 1 ? "" : "s", in_place, after - e->began, e->flushing, waited - before,
+-		    after - waited, e->attaching);
++		    "out), %llu before it for the IOSurfaces; %u IOSurface textures held, %u taken back from a full table\n",
++		    e->frames, e->calls, e->draws, e->triangles, e->clears, e->uploads, e->upload_bytes >> 10, copied,
++		    copied == 1 ? "" : "s", in_place, after - e->began, e->flushing, waited - before, after - waited, e->attaching,
++		    e->image_count, e->taken);
+ 	}
+ 	if (e->frames == 30 || e->frames % 200 == 0) {
+ 		summary(e);
 diff --git a/userland/src/flashlight.inc b/userland/src/flashlight.inc
 new file mode 100644
 index 0000000..e2f35a5
