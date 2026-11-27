@@ -1,0 +1,126 @@
+{
+ "peach": {
+  "revision": 10,
+  "stock_driver": "qca_cld3_peach",
+  "base": 8978432,
+  "bytes": 8978432,
+  "mhi": {
+   "name": "amss.bin",
+   "size": 6946880,
+   "fnv": "0x489e61c9265a507a",
+   "sha256": "46add886fc1016169c63be92a8ba4b69bd933eed2545b7005470ada35a4be4c1"
+  },
+  "files": [
+   {
+    "name": "tmel_peach_10.elf",
+    "what": "TME lite",
+    "offset": 17367040,
+    "size": 63096,
+    "fnv": "0x09d9e92756fe4a7e",
+    "sha256": "fdece71553b9fcf702ade4c934c6a28becbc4d09157e1ffa8db36da3e9ec7d4c"
+   },
+   {
+    "name": "regdb.bin",
+    "what": "the regulatory database",
+    "offset": 17432576,
+    "size": 24278,
+    "fnv": "0x29ea702baa663f4b",
+    "sha256": "353df6eb96be7f4c8406f313020d2b52c55905908eacc056b880202801f4a429"
+   },
+   {
+    "name": "bdwlang.elf",
+    "what": "the board file",
+    "offset": 17465344,
+    "size": 125328,
+    "fnv": "0x63eb583d85b21215",
+    "sha256": "cca33f457d711856345c1e5fc0ba15c87b89967812a3499e63abd49a3bea3abc"
+   },
+   {
+    "name": "phy_ucode.elf",
+    "what": "the PHY ucode",
+    "offset": 17592320,
+    "size": 290816,
+    "fnv": "0x6ad5559ff3b915b3",
+    "sha256": "da238ce5c170792261aa915bc49e37e5c305b3f288194512eca836a446e07e01"
+   },
+   {
+    "name": "aux_ucode.elf",
+    "what": "the AUX ucode",
+    "offset": 17883136,
+    "size": 61440,
+    "fnv": "0x3eb77d4fa2798ff1",
+    "sha256": "82ac4d90db4446e8d32997c4abdca6de13f9c970e3809f30e32cd1b2ec800fb8"
+   },
+   {
+    "name": "qdss_trace_config_v1.cfg",
+    "what": "the QDSS configuration",
+    "offset": 17944576,
+    "size": 6115,
+    "fnv": "0xe153077a3b9c39e7",
+    "sha256": "d33b9abafeb8d7f088addde91f4f4dd04bc89045a001ec0a7b5a206435157ede"
+   }
+  ]
+ },
+ "peach_v2": {
+  "revision": 20,
+  "stock_driver": "qca_cld3_peach_v2",
+  "base": 0,
+  "bytes": 8956001,
+  "mhi": {
+   "name": "amss20.bin",
+   "size": 6840384,
+   "fnv": "0x23266c0280baa80f",
+   "sha256": "f89a5348a4076d4db062eb335ac97b5fb028397bd3d21c96a837fb138503d84e"
+  },
+  "files": [
+   {
+    "name": "tmel_peach_20.elf",
+    "what": "TME lite",
+    "offset": 8388608,
+    "size": 55204,
+    "fnv": "0xa8ce60f4c4473602",
+    "sha256": "4814d33de80088dc3d79e8a08a3afabf193d33b0666a9d062fc4722546267774"
+   },
+   {
+    "name": "regdb.bin",
+    "what": "the regulatory database",
+    "offset": 8445952,
+    "size": 24278,
+    "fnv": "0x29ea702baa663f4b",
+    "sha256": "353df6eb96be7f4c8406f313020d2b52c55905908eacc056b880202801f4a429"
+   },
+   {
+    "name": "bdwlan.elf",
+    "what": "the board file",
+    "offset": 8470528,
+    "size": 125328,
+    "fnv": "0x0018b507fa89db11",
+    "sha256": "b95a047cda7ab3d23010f7cdc0dd031bc865fbf369191a55df6a44a574d4cccd"
+   },
+   {
+    "name": "phy_ucode20.elf",
+    "what": "the PHY ucode",
+    "offset": 8597504,
+    "size": 290816,
+    "fnv": "0xf0ad29b147a1e7b1",
+    "sha256": "fbe4ea920c38454b12d612f7c16e68a572a714aeca60d65c994abe1b516b24ba"
+   },
+   {
+    "name": "aux_ucode20.elf",
+    "what": "the AUX ucode",
+    "offset": 8888320,
+    "size": 61440,
+    "fnv": "0x8a9a6485c402114d",
+    "sha256": "5360d1b26c3b2458f3df30a0c690a17bc0f4b6952f36b805810061ff9be7995b"
+   },
+   {
+    "name": "qdss_trace_config_v2.cfg",
+    "what": "the QDSS configuration",
+    "offset": 8949760,
+    "size": 6241,
+    "fnv": "0xd51e00b6b794c0de",
+    "sha256": "17a855ff76656f3f8ea2571e2523a52a20d0ce036f42bd5728dcae49425ad889"
+   }
+  ]
+ }
+}

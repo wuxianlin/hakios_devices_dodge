@@ -2,6 +2,7 @@
 # docker/run.sh: make the build container if it is not there, then leave it running.
 #
 #   docker/run.sh [THEOS-DIR]        # default: ~/theos
+#   HAKIOS_CTR=NAME                  the container's name (default hakios-ctr); HAKIOS_IMAGE=TAG the image
 #
 # The container mounts:
 #   the tree  (this clone's kernel/ subdirectory, made by apply-kernel-patches.sh) at /work
@@ -11,7 +12,7 @@ set -e
 REPO=$(cd "$(dirname "$0")/.." && pwd -P)
 TREE="$REPO/kernel"
 NAME="${HAKIOS_CTR:-hakios-ctr}"
-IMAGE=hakios-build:24.04
+IMAGE="${HAKIOS_IMAGE:-hakios-build:24.04}"
 THEOS_DIR="${1:-$HOME/theos}"
 
 [ -f "$TREE/Makefile" ] || {

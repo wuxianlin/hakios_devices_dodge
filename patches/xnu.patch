@@ -1,0 +1,57 @@
+diff --git a/osfmk/arm/io_map.c b/osfmk/arm/io_map.c
+index 18ef2f0..36cd054 100644
+--- a/osfmk/arm/io_map.c
++++ b/osfmk/arm/io_map.c
+@@ -62,7 +62,7 @@
+ 
+ extern vm_offset_t virtual_space_start;     /* Next available kernel VA */
+ 
+-#define IO_MAP_SIZE            (8ul << 20)
++#define IO_MAP_SIZE            (128ul << 20)
+ 
+ __startup_data static struct mach_vm_range io_range;
+ static SECURITY_READ_ONLY_LATE(vm_map_t) io_submap;
+diff --git a/osfmk/kern/host.c b/osfmk/kern/host.c
+index 471f977..5067276 100644
+--- a/osfmk/kern/host.c
++++ b/osfmk/kern/host.c
+@@ -171,7 +171,7 @@ host_processors(host_priv_t host_priv, processor_array_t * out_array, mach_msg_t
+ 
+ 	for (unsigned int i = 0; i < count; i++) {
+ 		processor_t processor = processor_array[i];
+-		assert(processor != PROCESSOR_NULL);
++		if (processor == PROCESSOR_NULL) { continue; }
+ 
+ 		/* do the conversion that Mig should handle */
+ 		ipc_port_t processor_port = convert_processor_to_port(processor);
+@@ -514,7 +514,7 @@ host_statistics(host_t host, host_flavor_t flavor, host_info_t info, mach_msg_ty
+ 
+ 		for (unsigned int i = 0; i < pcount; i++) {
+ 			processor_t processor = processor_array[i];
+-			assert(processor != PROCESSOR_NULL);
++			if (processor == PROCESSOR_NULL) { continue; }
+ 			processor_cpu_load_info(processor, cpu_load_info->cpu_ticks);
+ 		}
+ 		simple_unlock(&processor_list_lock);
+@@ -1130,7 +1130,7 @@ host_processor_info(host_t host,
+ 
+ 	for (unsigned int i = 0; i < pcount; i++) {
+ 		processor_t processor = processor_array[i];
+-		assert(processor != PROCESSOR_NULL);
++		if (processor == PROCESSOR_NULL) { continue; }
+ 
+ 		unsigned int tcount = icount;
+ 
+diff --git a/pexpert/pexpert/arm64/boot.h b/pexpert/pexpert/arm64/boot.h
+index 2c2186f..f7b75aa 100644
+--- a/pexpert/pexpert/arm64/boot.h
++++ b/pexpert/pexpert/arm64/boot.h
+@@ -23,7 +23,7 @@
+  * This value matches iBoot's IBOOT_MAX_ENV_VAR_DATA_SIZE.
+  * There are no iBoot headers so have to duplicate it here for now.
+  */
+-#define BOOT_LINE_LENGTH        608
++#define BOOT_LINE_LENGTH        4096  /* hakios: the loader prepends its own arguments; 608 cut sound= and slider= off */
+ 
+ /*
+  * Video information..

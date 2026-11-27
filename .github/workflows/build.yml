@@ -8,9 +8,9 @@ on:
 
 env:
   # the common repository this port is built against: hakios-xnu-kernel at main, at the revision
-  # the two patches were made against (bump this when the patches are rebased), plus this
-  # repository laid in as devices/dodge (patches/kernel-common.patch and patches/xnu-dodge.patch
-  # on the tree; the drivers, the ath12k stack and the Mesa port from this repository itself)
+  # the patch was made against (bump this when it is rebased), plus this repository laid in as
+  # devices/dodge (patches/kernel-common.patch on the tree; the drivers, the ath12k stack and the Mesa
+  # port from this repository itself)
   HAKIOS_REPO: https://github.com/oosexgang/hakios-xnu-kernel.git
   HAKIOS_REF: 63fc2b4633bac3af8e57dadab9f5a8d4cb940438
 
@@ -60,18 +60,19 @@ jobs:
           find . -mindepth 1 -maxdepth 1 -not -name hackios -exec cp -r {} hackios/devices/dodge/ \;
           rm -rf hackios/devices/dodge/.git
           cd hackios
+          # this repository's patch on the common tree: everything the port changes in it (the same one
+          # apply-kernel-patches.sh puts on the local tree)
           git apply --whitespace=nowarn devices/dodge/patches/kernel-common.patch
-          git apply --whitespace=nowarn devices/dodge/patches/xnu-dodge.patch
           # the ath12k station stack (wifi/ of this repository; the object is built below)
           rm -rf wifi/ath12k && cp -r devices/dodge/wifi/ath12k wifi/ath12k
           # the upstream's own XNU patch and files/, then the kernel build's dependencies
           # (the SDK, the host tools, the stage-2 libraries; the committed xnu-clang wrapper
           # satisfies its guard -- idempotent, uses the theos above)
           xnu/apply.sh
-          # the five fixes the phone's kernel needs (the same ones docker/build.sh applies
-          # locally: the IO submap, the NULL processors, the watchdog pet, the boot line,
-          # the log ring -- without them the kernel panics or freezes on the phone)
-          devices/dodge/docker/xnu-fixes.sh xnu-src/xnu-8796.121.2
+          # this repository's patch on Apple's XNU tree: the fixes the phone's kernel needs (the IO submap,
+          # the NULL processors skipped, the boot line -- without them the kernel panics or freezes on the
+          # phone; the same one docker/build.sh applies locally)
+          devices/dodge/tools/xnu-patch.sh .
           xnu-deps/setup.sh
 
       - name: checks (the tree's own consistency, the same ones locally)
@@ -80,6 +81,9 @@ jobs:
           python3 tools/hakios-device.py check     # every device repository holds together
           python3 tools/drivers-check.py           # drivers/map against the tree and the confs
           python3 tools/boot-args.py --check       # the generated lists are in step with the source
+          # the WCN7850's firmware this repository carries, and the loader's table of it (in the patches): the
+          # loader looks for each revision's bytes where the table says, in the one image the host stages
+          python3 devices/dodge/tools/compose_combined.py --check .
 
       # ---- the ath12k object: FreeBSD's LinuxKPI pulled from FreeBSD's own archive; cached ----
 
@@ -226,7 +230,8 @@ jobs:
           # out of the box (refreshed from the phone by devices/dodge/pull-firmware.sh):
           # the GPU's images (without them the kernel's GPU bring-up stops at its step 9),
           # the audio DSP's (the speakers and the battery's GLINK ride it), the Bluetooth
-          # set, the WCN7850's (combined20.bin is what the loader's MHI download stages),
+          # set, the WCN7850's (combined.bin -- both revisions' sets, peach and peach_v2 -- is what the host
+          # stages and the loader's MHI download takes the chip's revision's set of),
           # and the Iris VPU's (vpu35_4v.mbn: the H.264/HEVC hardware decoder's image)
           for d in fw-gpu fw-audio fw-bt fw-wifi fw-video; do
             [ -d devices/dodge/$d ] && rm -rf $d && cp -r devices/dodge/$d $d
@@ -270,6 +275,9 @@ jobs:
           ls -la devices/dodge/dist/ || { echo "no dist under devices/dodge"; find .. -name 'hakios-dodge-*.zip' -newer /tmp/marker 2>/dev/null; }
           touch /tmp/marker
           python3 -m zipfile -l devices/dodge/dist/hakios-dodge-*.zip | tail -4
+          # without the WCN7850's image beside the launcher, the zip boots without the Wi-Fi bring-up
+          python3 -m zipfile -l devices/dodge/dist/hakios-dodge-*.zip | grep -q -E '/combined\.bin[[:space:]]' \
+            || { echo '--- the zip has no combined.bin: it would boot without the Wi-Fi bring-up'; exit 1; }
 
       # ---- publish: one artifact, and the same zip on a tag ----
 

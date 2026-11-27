@@ -1,5 +1,7 @@
 /kernel/
 /dist/
+# the launcher's own logs when it runs from this directory (a release zip's stay beside it)
+/launcher/*.log
 __pycache__/
 *~
 *.img
@@ -10,6 +12,7 @@ usb-payload.bin
 !fw-audio/**
 !fw-bt/**
 !fw-wifi/peach/**
-!fw-wifi/combined20.bin
+!fw-wifi/peach_v2/**
+!fw-wifi/combined.bin
 
 fw-wifi/network

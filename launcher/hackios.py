@@ -107,33 +107,59 @@ def device_args():
         return ''
     return ' '.join(l.split('#', 1)[0].strip() for l in open(p)).strip()
 
+def loader_log_now(name):
+    """what the loader has logged by its last command, kept as <name>.log beside this script -- and said in one
+    line. The loader empties its log at every command of the Wi-Fi bring-up, so a refusal has to be read at
+    once, or never"""
+    try:
+        p = os.path.join(HERE, name + '.log')
+        fb('oem', 'log', timeout=30)
+        fb('get_staged', p, timeout=60)
+        text = open(p, 'rb').read().replace(b'\0', b'').decode('utf-8', 'replace') if os.path.isfile(p) else ''
+    except (OSError, ValueError):
+        text = ''
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return ' (the loader said nothing)'
+    said = [l for l in lines if 'failed' in l or 'refused' in l or 'fault' in l or 'not ' in l]
+    return ' -- the loader said: ' + ' | '.join((said or lines)[-3:])[:400] + f' (all of it: {p})'
+
 def wifi():
     """the WCN7850's bring-up in the loader: the staged sequence the port's own rounds run
     (map, rails, clocks, link+survey, the firmware download over MHI, the QMI rounds,
     transfer-prepare). The kernel adopts the lease this leaves; without it there is no
-    Wi-Fi. Skipped when combined20.bin is not beside this script."""
-    fw = os.path.join(HERE, 'combined20.bin')
+    Wi-Fi.
+
+    An OnePlus 13 carries one of two revisions of the WCN7850, peach or peach_v2, and each takes its own
+    firmware. combined.bin holds both sets, and which is downloaded is not decided here: at the link step the
+    loader reads the chip's revision off the chip itself (its second aperture: 2 MiB on the first, 32 KiB on
+    the second) and takes that revision's set out of the image. Skipped when combined.bin is not beside
+    this script; a step the loader refuses ends the run with what the loader said (wifi-*.log)."""
+    fw = os.path.join(HERE, 'combined.bin')
     if not os.path.isfile(fw):
-        print('no combined20.bin beside this script: the Wi-Fi bring-up is skipped')
+        print('no combined.bin beside this script: the Wi-Fi bring-up is skipped')
         return
-    print('the Wi-Fi bring-up (map, rails, clocks, link)...')
+    print('the Wi-Fi bring-up (map, rails, clocks, link; the chip\'s revision is read at the link)...')
     for step in ('map', 'rails', 'clocks'):
-        'OKAY' in fb('oem', f'op13-wifi-{step}', timeout=60) or die(f'op13-wifi-{step} failed')
+        'OKAY' in fb('oem', f'op13-wifi-{step}', timeout=60) or die(f'op13-wifi-{step} failed' + loader_log_now('wifi-refused'))
     ok = False
     for _ in range(3):
         ok = 'OKAY' in fb('oem', 'op13-wifi-link', timeout=120)
         if ok:
             break
-    ok or die('op13-wifi-link failed (the survey never came up)')
-    print('staging the firmware and downloading it over MHI (a minute or two)...')
-    'OKAY' in fb('stage', fw, timeout=600) or die('staging combined20.bin failed')
+    ok or die('op13-wifi-link failed (the survey never came up)' + loader_log_now('wifi-refused'))
+    print('staging the firmware of both revisions, and downloading the chip\'s over MHI (a minute or two)...')
+    'OKAY' in fb('stage', fw, timeout=600) or die('staging combined.bin failed' + loader_log_now('wifi-refused'))
     for n in (9, 8, 6):
-        'OKAY' in fb('oem', 'op13-wifi-smmu', str(n), timeout=90) or die(f'op13-wifi-smmu {n} failed')
-    fb('oem', 'op13-wifi-smmu', '7', timeout=900)          # the firmware download itself
+        'OKAY' in fb('oem', 'op13-wifi-smmu', str(n), timeout=90) or die(f'op13-wifi-smmu {n} failed' + loader_log_now('wifi-refused'))
+    if 'OKAY' not in fb('oem', 'op13-wifi-smmu', '7', timeout=900):     # the firmware download itself
+        die('the radio would not take the firmware' + loader_log_now('wifi-download'))
     for n in (2, 1, 3):
-        'OKAY' in fb('oem', 'op13-wifi-smmu', str(n), timeout=120) or die(f'op13-wifi QMI {n} failed')
-    fb('oem', 'op13-wifi-smmu', '0', timeout=300)          # the file rounds
-    fb('oem', 'op13-wifi-transfer-prepare', timeout=120) or None
+        'OKAY' in fb('oem', 'op13-wifi-smmu', str(n), timeout=120) or die(f'op13-wifi QMI {n} failed' + loader_log_now('wifi-refused'))
+    if 'OKAY' not in fb('oem', 'op13-wifi-smmu', '0', timeout=300):     # the file rounds
+        die('the radio would not take its files' + loader_log_now('wifi-files'))
+    if 'OKAY' not in fb('oem', 'op13-wifi-transfer-prepare', timeout=120):
+        die('the loader would not hand the radio over' + loader_log_now('wifi-handover'))
     print('the WCN7850 is up; the lease is ready for the kernel to adopt')
 
 def run():

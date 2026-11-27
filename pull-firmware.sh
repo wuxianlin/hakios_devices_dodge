@@ -9,20 +9,26 @@
 #              signed image, the DSP's own device tree (adsp_dtb.*), which TrustZone starts before
 #              the DSP itself; the compute DSP's pair (cdsp.*, cdsp_dtb.*) comes too, as the
 #              cross-check of the audio DSP's release (boot-args adsp_fw=cdsp adsp_pas=18)
-#   fw-wifi/   the WCN7850's set from /vendor/firmware_mnt/image/peach/ (the kiwi/ variant comes
-#              too, as the hash cross-check): amss20, tmel, regdb, the board file (bdwlan.e* are
-#              hashed to the one this phone is, into bdwlan.elf), the PHY and AUX ucode. Then
-#              tools/compose_combined.py makes fw-wifi/combined20.bin, the image the loader
-#              downloads over MHI, and rewrites the loader's file table (xnuloader/op13_wifi_files.h)
+#   fw-wifi/   the WCN7850's files, a set for each revision an OnePlus 13 carries. peach, the first
+#              (Android's qca_cld3_peach): amss.bin, tmel_peach_10.elf, the ODM's bdwlang.elf and
+#              regdb.bin, phy_ucode.elf, aux_ucode.elf, qdss_trace_config_v1.cfg; peach_v2, the
+#              second (qca_cld3_peach_v2): amss20.bin, tmel_peach_20.elf, bdwlan.elf, the "20"
+#              ucode, qdss_trace_config_v2.cfg. This refreshes the set of the revision the phone
+#              carries, with the files Android itself loaded on it (its dmesg says which). Then
+#              tools/compose_combined.py makes fw-wifi/combined.bin -- both sets, the image the
+#              host stages and the loader downloads the chip's revision's set of -- and holds the
+#              loader's table (xnuloader/op13_wifi_files.h, in the tree) to what was composed
 #   fw-bt/     the Bluetooth firmware (hmtbtfw*, hmtnv*) from /vendor/bt_firmware/image/
 #   fw-video/  the Iris VPU's PAS image (vpu35_4v.mbn): the H.264/HEVC hardware decoder's
 #   fw-gpu/    the Adreno 830's three images (gen80000_*) -- these three are small enough that the
 #              repository carries them; this refreshes them from the phone
 #
 # On this phone adsp.mdt is r--r----- system:system: adb cannot read it directly, so root copies
-# the lot to /data/local/tmp first (the old port's pull-firmware.sh, proven).
+# the lot to /data/local/tmp first (the old port's pull-firmware.sh, proven). The WCN7850's files
+# are read one by one with "adb pull": their bytes come back in 64 KiB packets, where a long stream
+# out of "adb shell" is one a virtual machine's USB may drop.
 set -e
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")"
 
 adb get-state >/dev/null 2>&1 || { echo "pull-firmware.sh: the phone is not on adb"; exit 1; }
 
@@ -46,24 +52,39 @@ adb pull /data/local/tmp/aw882xx_acf.bin fw-audio/aw882xx_acf.bin >/dev/null 2>&
 adb shell "su -c 'rm -f /data/local/tmp/aw882xx_acf.bin'"
 ls fw-audio | head -4; echo "   ($(ls fw-audio | wc -l) files)"
 
-echo "== the WCN7850's set (the six native files from /odm/etc/wifi/peach -- this phone's ODM"
-echo "   calibration, the set the loader's hash table is made of; the base amss20 image from the"
-echo "   vendor's own partition; the vendor's stock peach kept beside as the cross-check)"
-mkdir -p fw-wifi/raw
-adb shell "su -c 'rm -rf /data/local/tmp/wfw; mkdir -p /data/local/tmp/wfw/odm /data/local/tmp/wfw/peach;
-	cp /odm/etc/wifi/peach/* /data/local/tmp/wfw/odm/ 2>/dev/null;
-	cp /vendor/firmware_mnt/image/peach/amss20.bin /data/local/tmp/wfw/odm/ 2>/dev/null;
-	cp /vendor/firmware_mnt/image/tmel_peach_*.elf /data/local/tmp/wfw/odm/ 2>/dev/null;
-	cp /vendor/firmware_mnt/image/peach/* /data/local/tmp/wfw/peach/ 2>/dev/null;
-	chmod -R a+rwX /data/local/tmp/wfw'"
-adb shell "su -c 'cd /data/local/tmp/wfw && tar cf - .'" | tar xf - -C fw-wifi/raw/
+# ---- the WCN7850: which revision this phone carries, by the stock driver Android has live ----
+stock=$(adb shell "ls /sys/module" | tr -d '\r' | grep -m1 '^qca_cld3_peach')
+case "$stock" in
+	qca_cld3_peach)
+		variant=peach; image=amss.bin; tmel=tmel_peach_10.elf; bdf=bdwlang.elf
+		phy=phy_ucode.elf; aux=aux_ucode.elf; qdss=qdss_trace_config_v1.cfg ;;
+	qca_cld3_peach_v2)
+		variant=peach_v2; image=amss20.bin; tmel=tmel_peach_20.elf; bdf=bdwlan.elf
+		phy=phy_ucode20.elf; aux=aux_ucode20.elf; qdss=qdss_trace_config_v2.cfg ;;
+	*)
+		echo "pull-firmware.sh: neither qca_cld3_peach nor qca_cld3_peach_v2 is live on this phone (is it in Android?)"
+		exit 1 ;;
+esac
+echo "== the WCN7850's set for this phone's revision ($variant: Android drives it with $stock)"
+echo "   what Android loaded at its boot -- its own choice of files:"
+adb shell "su -c 'dmesg | grep -E \"Direct firmware load for peach|loading .(tmel|peach/)|Downloading (BDF|REGDB)\"'" \
+	| tr -d '\r' | sed -E "s/.*(for |loading '|BDF: |REGDB: )([^' ,]*).*/      \2/" | sort -u
+# the board file is the one Android downloaded, when its log still says so
+said=$(adb shell "su -c 'dmesg | grep -m1 \"Downloading BDF\"'" | tr -d '\r' | sed -nE 's/.*BDF: [^/]*\/([^,]*),.*/\1/p')
+[ -n "$said" ] && bdf=$said
+I=/vendor/firmware_mnt/image; O=/odm/etc/wifi/peach
+adb shell "su -c 'rm -rf /data/local/tmp/wfw; mkdir -p /data/local/tmp/wfw; cd /data/local/tmp/wfw;
+	cp $I/peach/$image $I/$tmel $I/peach/$phy $I/peach/$aux $I/peach/$qdss $O/$bdf $O/regdb.bin .;
+	chmod 644 *; chmod 755 .; chown shell:shell . *; ls'" | tr -d '\r' | tr '\n' ' '; echo
+mkdir -p "fw-wifi/$variant"
+for f in $image $tmel $phy $aux $qdss $bdf regdb.bin; do
+	adb pull "/data/local/tmp/wfw/$f" "fw-wifi/$variant/$f" >/dev/null 2>&1 \
+		|| echo "   WARN: $f is not on this phone -- fw-wifi/$variant keeps what it had"
+done
 adb shell "su -c 'rm -rf /data/local/tmp/wfw'"
-mkdir -p fw-wifi/peach
-# the hash table decides: of everything pulled, only files matching the loader's table are
-# applied -- the stock board file and regulatory database never overwrite the ODM set
-python3 devices/dodge/tools/match_files.py fw-wifi/raw/odm --apply fw-wifi/peach
-cp -f fw-wifi/raw/odm/amss20.bin fw-wifi/peach/amss20.bin 2>/dev/null || true
-echo "   composed of (fw-wifi/peach): $(ls fw-wifi/peach | tr '\n' ' ')"
+echo "   fw-wifi/$variant: $(ls "fw-wifi/$variant" | tr '\n' ' ')"
+# both sets into the one staged image, and the loader's table in the tree held to them
+python3 tools/compose_combined.py ${TREE:-}
 
 echo "== the Bluetooth firmware (/vendor/bt_firmware/image)"
 rm -rf fw-bt && mkdir -p fw-bt
@@ -86,5 +107,5 @@ adb pull /vendor/firmware/vpu35_4v.mbn fw-video/vpu35_4v.mbn >/dev/null 2>&1 || 
 ls -la fw-video | tail -1
 
 echo
-echo "next: python3 devices/dodge/tools/compose_combined.py \$PWD   # fw-wifi/combined20.bin + the loader's file table"
-echo "      (and rebuild the loader afterwards: devices/dodge/docker/build.sh loader)"
+echo "next: nothing, when the loader's table checked (above); else the refreshed files are other firmware than"
+echo "      the table was made of: python3 tools/compose_combined.py --header says the table afresh, for patches/"

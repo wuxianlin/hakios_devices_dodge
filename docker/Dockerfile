@@ -30,9 +30,12 @@ RUN apt-get update -q && apt-get install -y --no-install-recommends \
     && apt-get update -q && apt-get install -y --no-install-recommends clang-20 lld-20 llvm-20 \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m pip install --break-system-packages lzfse \
+    # (the archive has 7zz at its top, no directory to strip: with --strip-components=1 the name
+    #  comes off before it is matched, tar extracts nothing, exits 0, and the link below dangles)
     && curl -fsSL https://github.com/ip7z/7zip/releases/download/26.05/7z2605-linux-x64.tar.xz \
-        | tar -xJ -C /usr/local/bin --strip-components=1 7zz \
-    && ln -sf /usr/local/bin/7zz /usr/local/bin/7z
+        | tar -xJ -C /usr/local/bin 7zz \
+    && ln -sf /usr/local/bin/7zz /usr/local/bin/7z \
+    && test -x /usr/local/bin/7zz
 
 # the builder: the same uid as the host's user, so what the container writes is ours
 RUN (userdel -f ubuntu 2>/dev/null || true) \

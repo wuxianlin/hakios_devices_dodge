@@ -27,6 +27,9 @@ rm -rf dist && mkdir -p "$DIR"
 for f in boot.img hakios-kernel kernel.bin; do
 	[ -f "$TOP/$f" ] && cp "$TOP/$f" "$DIR/"
 done
+# the kernel under the launcher's own name for it, as the CI's zip has it (the workflow makes kernel.bin; a local
+# build leaves the kernel as hakios-kernel -- which the launcher takes as well, but the zip should be the same zip)
+[ -f "$DIR/kernel.bin" ] || [ ! -f "$DIR/hakios-kernel" ] || cp "$DIR/hakios-kernel" "$DIR/kernel.bin"
 [ -f "$TOP/xnuloader/loader.efi" ] && cp "$TOP/xnuloader/loader.efi" "$DIR/"
 [ -f "$TOP/userland/root.apfs" ] && cp "$TOP/userland/root.apfs" "$DIR/"     # the boot RAM disk
 [ -f "$TOP/userland/system.apfs" ] && cp "$TOP/userland/system.apfs" "$DIR/" # the system image
@@ -42,13 +45,14 @@ fi
 cp launcher/hackios.py launcher/run.sh launcher/run.bat "$DIR/"
 chmod +x "$DIR/run.sh"
 
-# the WCN7850's firmware, which the launcher stages for the loader's MHI download:
-# it must sit beside hackios.py or the zip boots without the Wi-Fi bring-up.
-# (fw-wifi/network holds this network's credentials and never ships)
-if [ -f fw-wifi/combined20.bin ]; then
-	cp fw-wifi/combined20.bin "$DIR/"
+# the WCN7850's firmware, which the launcher stages for the loader's MHI download: both revisions an
+# OnePlus 13 carries (peach and peach_v2) are in the one image, and the loader downloads the chip's own
+# (it reads the revision off the chip, at the link step). It must sit beside hackios.py or the zip
+# boots without the Wi-Fi bring-up. (fw-wifi/network holds this network's credentials and never ships)
+if [ -f fw-wifi/combined.bin ]; then
+	cp fw-wifi/combined.bin "$DIR/"
 else
-	echo "package.sh: no fw-wifi/combined20.bin -- the zip will boot WITHOUT the Wi-Fi bring-up" >&2
+	echo "package.sh: no fw-wifi/combined.bin -- the zip will boot WITHOUT the Wi-Fi bring-up" >&2
 fi
 
 # the device's kernel arguments: the BASE= line of run-linux.sh, the set the phone runs

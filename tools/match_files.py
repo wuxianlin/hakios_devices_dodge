@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
-import os, sys
+"""match_files.py DIR [DIR ...] [--apply DIR2]: which files there are ones the repository already carries -- by
+size and FNV-1a 64 against fw-wifi/sets.json, what tools/compose_combined.py wrote: the MHI image of a set, one
+of a set's files, or none of them. With --apply DIR2, those found are copied into DIR2/<the set>/ under the
+repository's names. What matches nothing is left alone: a stock board file never passes for the ODM's calibration.
+
+    python3 devices/dodge/tools/match_files.py fw-wifi/raw/odm --apply fw-wifi
+"""
+import json
+import os
+import shutil
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SETS = os.path.join(os.path.dirname(HERE), 'fw-wifi', 'sets.json')
+
 
 def fnv(b):
     h = 0xcbf29ce484222325
@@ -8,42 +22,24 @@ def fnv(b):
         h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
     return h
 
-table = [
-    (0x800000, 0xd7a4, 0xa8ce60f4c4473602, "tmel_peach_20.elf"),
-    (0x80e000, 0x5ed6, 0x29ea702baa663f4b, "regdb.bin"),
-    (0x814000, 0x1e990, 0x018b507fa89db11, "bdwlan.elf"),
-    (0x833000, 0x47000, 0xf0ad29b147a1e7b1, "phy_ucode20.elf"),
-    (0x87a000, 0x0f000, 0x8a9a6485c402114d, "aux_ucode20.elf"),
-    (0x889000, 0x1861, 0xd51e00b6b794c0de, "qdss_trace_config_v2.cfg"),
-]
 
-import shutil
-args = [a for a in sys.argv[1:] if not a.startswith("-")]
-apply_to = None
-if "--apply" in sys.argv:
-    apply_to = sys.argv[sys.argv.index("--apply") + 1]
-d = args[0] if args else os.path.expanduser("~/workspace/hakios/hakios-xnu-kernel/fw-wifi/kiwi")
-found = {}
-for name in sorted(os.listdir(d)):
-    p = os.path.join(d, name)
-    if not os.path.isfile(p) or name.startswith("bdwlan.e") and not name.endswith((".elf", ".bin")):
-        continue
-    sz = os.path.getsize(p)
-    h = fnv(open(p, "rb").read())
-    for off, size, want, label in table:
-        if h == want and sz == size:
-            found[label] = p
-            print(f"MATCH {label:28s} <- {name} (size {sz:#x})")
+args = [a for a in sys.argv[1:] if not a.startswith('-')]
+apply_to = args[args.index('--apply') + 1] if '--apply' in sys.argv else None
+dirs = [a for a in args if a != apply_to] or [os.getcwd()]
+
+known = {}                       # (size, fnv) -> [(the set's name, the repository's name for the file)]
+for variant, s in json.load(open(SETS)).items():
+    for f in [s['mhi']] + s['files']:
+        known.setdefault((f['size'], int(f['fnv'], 16)), []).append((variant, f['name']))
+
+for d in dirs:
+    for name in sorted(os.listdir(d)):
+        path = os.path.join(d, name)
+        if not os.path.isfile(path):
+            continue
+        data = open(path, 'rb').read()
+        for variant, want in known.get((len(data), fnv(data)), []):
+            print('MATCH %s/%-28s <- %s' % (variant, want, path))
             if apply_to:
-                os.makedirs(apply_to, exist_ok=True)
-                shutil.copy2(p, os.path.join(apply_to, label))
-    # also report near-size candidates for missing entries
-
-print("\nmissing:")
-for off, size, want, label in table:
-    if label not in found:
-        print(f"  {label:28s} size {size:#x}")
-        for name in sorted(os.listdir(d)):
-            p = os.path.join(d, name)
-            if os.path.isfile(p) and os.path.getsize(p) == size:
-                print(f"    size-candidate: {name} (fnv {fnv(open(p,'rb').read()):#x})")
+                os.makedirs(os.path.join(apply_to, variant), exist_ok=True)
+                shutil.copy2(path, os.path.join(apply_to, variant, want))
