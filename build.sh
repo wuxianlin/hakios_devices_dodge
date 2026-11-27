@@ -4,11 +4,16 @@
 #   ./build.sh                 # from the root of this clone
 #
 # Steps (each skipped when its output already exists and is newer; IPSW= is needed by the first build only):
+#
+# HAKIOS_MU=<a Mu-Silicium tree with this port in it, built elsewhere>: the UEFI volume, BootShim and mkbootimg
+# are taken from it (it is linked as kernel/Mu-Silicium) instead of the tree docker/build.sh uefi would clone.
 #   1. kernel + loader         docker/build.sh (the container compiles both)
 #   2. firmware in place       the repository's fw-* directories copied to the tree
 #   3. images                  the IPSW unpacked into the tree the first time (docker/build.sh unpack), then
 #                              make images (GL=1 REST=1, as the CI: Mesa, and the rest of our programs)
-#   4. boot image              mkpayload.py + mkxnuimg.py (the UEFI FD: made once, docker/build.sh uefi)
+#   4. boot image              mkpayload.py + mkxnuimg.py, in the container (the UEFI FD out of a Mu-Silicium
+#                              tree with this port in it: HAKIOS_MU=<that tree>, else made once by
+#                              docker/build.sh uefi)
 #   5. package                 package.sh -> dist/hakios-dodge-*.zip
 set -e
 REPO=$(cd "$(dirname "$0")" && pwd -P)
@@ -19,6 +24,17 @@ CTR="${HAKIOS_CTR:-hakios-ctr}"
 	echo "build.sh: no tree at $TREE -- run ./apply-kernel-patches.sh first" >&2
 	exit 1
 }
+
+# a Mu-Silicium tree built elsewhere (HAKIOS_MU) is the UEFI's for this build: linked here, before the
+# container is looked at -- docker/run.sh mounts a linked tree at its own path
+if [ -n "${HAKIOS_MU:-}" ] && [ ! -e "$TREE/Mu-Silicium" ]; then
+	[ -f "$HAKIOS_MU/BootShim/Makefile" ] || { echo "build.sh: $HAKIOS_MU is not a Mu-Silicium tree" >&2; exit 1; }
+	echo "== the Mu-Silicium tree $HAKIOS_MU, linked as kernel/Mu-Silicium"
+	ln -s "$(cd "$HAKIOS_MU" && pwd -P)" "$TREE/Mu-Silicium"
+fi
+# the build container, looked at first: docker/run.sh makes it, and makes it again when a linked
+# Mu-Silicium tree has to be mounted into it (docker/build.sh alone asks for it only when it is not running)
+"$REPO/docker/run.sh"
 
 echo "== the kernel and the loader"
 "$REPO/docker/build.sh"
@@ -63,16 +79,20 @@ else
 fi
 
 echo "== the boot image"
+# the UEFI firmware volume, out of a Mu-Silicium tree with this port in it: one built elsewhere (HAKIOS_MU,
+# linked as kernel/Mu-Silicium), or -- none given, none linked -- made here once by docker/build.sh uefi,
+# as the CI makes it (an hour of submodule cloning the first time). The boot image needs the tree's
+# BootShim and mkbootimg beside the volume; the BootShim is compiled (mkxnuimg.py does), so this runs in
+# the build container, with its clang and llvm-objcopy.
 FD="$TREE/Mu-Silicium/Build/dodgePkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd"
-# the UEFI firmware volume: made once, as the CI makes it (a Mu-Silicium clone with this port in it)
 [ -s "$FD" ] || "$REPO/docker/build.sh" uefi
 if [ -s "$FD" ]; then
-	(cd "$TREE" &&
+	docker exec -w /work -u "$(id -u):$(id -g)" "$CTR" bash -c '
 		python3 xnuloader/mkpayload.py -o usb-payload.bin loader.efi=xnuloader/loader.efi --usb &&
-		UEFI_FD="$FD" \
+		UEFI_FD=Mu-Silicium/Build/dodgePkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd \
 		DTB=Mu-Silicium/Resources/DTBs/dodge.dtb \
 		FD_BASE=0xA7100000 FD_SIZE=0x300000 PAYLOAD_BASE=0xF0000000 BOOT_HEADER=4 \
-		python3 mkxnuimg.py -p usb-payload.bin -o boot.img)
+		python3 mkxnuimg.py -p usb-payload.bin -o boot.img'
 else
 	echo "   (no UEFI FD -- boot.img skipped)"
 fi
