@@ -3,10 +3,20 @@
 #include "hakios.adreno8_smmu_private.h"
 #include "hakios.adreno8_hwsched_private.h"
 #include "hakios.adreno8_context_private.h"
+#include <sys/proc.h>
 
 #define printf adreno8_say
 
 static enum { BO_COLD, BO_ENABLED, BO_FAILED } bo_state;
+
+/*
+ * A zeroed read-only page mapped after every BO, as KGSL maps its guard page: the GPU reads a
+ * little past the end of a buffer (render48: the first byte after SpringBoard's newest BO, which
+ * was the last one in the space), and with nothing mapped there the read is an SMMU fault, which
+ * closes submissions until a cold reset. The guard is part of the reservation and goes with it.
+ */
+static vm_offset_t bo_guard;
+static uint64_t bo_guard_pte;
 
 void
 adreno8_bo_stop(void)
@@ -55,6 +65,13 @@ adreno8_bo_enable(void)
 	if (bo_state == BO_ENABLED) return adreno8_bo_ready();
 	if (!adreno8_context_wait_idle("external BO enable")) return false;
 	if (!adreno8_gpu_memory_verify() || !adreno8_hfi_poll()) return false;
+	if (bo_guard == 0) {
+		if (kmem_alloc(kernel_map, &bo_guard, PAGE_SIZE, KMA_KOBJECT | KMA_ZERO | KMA_DATA,
+		    VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS)
+			return bo_fail("guard page");
+		adreno8_to_memory(bo_guard, PAGE_SIZE);
+		bo_guard_pte = kvtophys(bo_guard) | adreno8_space_attributes(ADRENO8_MEM_READ) | ADRENO8_PTE_EXTERNAL;
+	}
 	bo_state = BO_ENABLED;
 	return adreno8_bo_ready();
 }
@@ -67,41 +84,170 @@ bo_range(uint64_t address, uint64_t size)
 	    size <= ADRENO8_GPU_IOVA_END - address;
 }
 
-/* Every page below this address was in use when last looked at: a search for room starts here. */
+/*
+ * Where the search for room starts: just past the last reservation, wrapping to the start of the
+ * range when the rest has no room. The search used to start at the lowest free page, and every
+ * small buffer given back moved that down, so a larger reservation then stepped page by page
+ * through every page in use above it: adreno8_space_find_range was about a fifth of SpringBoard's
+ * processor time while it swiped pages (kernel-12377-cmd26-wait1). With a few hundred MB in use,
+ * the room past the last buffer is free nearly every time.
+ *
+ * The cursor goes back to the start once it passes BO_WINDOW, so the addresses in use, and the
+ * level-2 tables they need, stay near what is live. Walking all 3.25 GB needs about 1670 tables
+ * (one per 2 MB); the space holds 1024, and the reservation that found none closed submissions and
+ * took backboardd and SpringBoard down after a few minutes of swiping (kernel-12377-cmd31-warm5,
+ * "external BO reservation tables failed"; kernel-12377-cmd27-bo1's backboardd SIGSEGV). A live
+ * set larger than the window still finds room past it: the search runs to the end of the range.
+ */
+#define BO_WINDOW       (512u << 20)
 static uint32_t bo_free_from = ADRENO8_GPU_IOVA_START;
+
+/*
+ * The last BO_HISTORY reservations, with the process that asked and when each was given back, for
+ * an SMMU fault report. Buffers are packed one after another, so a read that runs past the end of
+ * one lands in the next and does not fault; a fault lands in a hole, which is either a buffer
+ * that has been released or the room after the last one. The report names which.
+ */
+#define BO_HISTORY 4096
+static struct bo_record {
+	uint32_t address, size;
+	int pid;
+	uint64_t reserved, released;    /* mach_absolute_time; released is 0 while the BO is live */
+} bo_history[BO_HISTORY];
+static uint32_t bo_history_next;
+
+static void
+bo_note_reserve(uint32_t address, uint64_t size)
+{
+	bo_history[bo_history_next++ % BO_HISTORY] = (struct bo_record){
+		.address = address, .size = (uint32_t)size, .pid = proc_selfpid(),
+		.reserved = mach_absolute_time(),
+	};
+}
+
+static void
+bo_note_release(uint64_t address, uint64_t size)
+{
+	for (uint32_t i = 1; i <= BO_HISTORY; i++) {
+		struct bo_record *r = &bo_history[(bo_history_next - i) % BO_HISTORY];
+
+		if (r->reserved != 0 && r->released == 0 && r->address == address && r->size == size) {
+			r->released = mach_absolute_time();
+			return;
+		}
+	}
+}
+
+static void
+bo_say_record(uint32_t fault, const char *what, const struct bo_record *r, uint64_t now)
+{
+	uint64_t reserved, released = 0;
+
+	absolutetime_to_nanoseconds(now - r->reserved, &reserved);
+	if (r->released != 0)
+		absolutetime_to_nanoseconds(now - r->released, &released);
+	printf("adreno8: fault %#x: %s BO %#x+%#x (fault at offset %lld), pid %d, reserved %llu ms ago, "
+	    "released %lld ms ago (-1: live)\n", fault, what, r->address, r->size,
+	    (long long)fault - (long long)r->address, r->pid, reserved / NSEC_PER_MSEC,
+	    r->released != 0 ? (long long)(released / NSEC_PER_MSEC) : -1ll);
+}
+
+void
+adreno8_bo_describe_fault(uint32_t fault)
+{
+	static bool described;
+	const struct bo_record *below = NULL, *above = NULL;
+	uint64_t now = mach_absolute_time();
+	unsigned holders = 0;
+
+	if (described)
+		return;
+	described = true;
+	for (uint32_t i = 1; i <= BO_HISTORY; i++) {
+		const struct bo_record *r = &bo_history[(bo_history_next - i) % BO_HISTORY];
+
+		if (r->reserved == 0)
+			continue;
+		if (fault >= r->address && fault - r->address < r->size && holders < 4) {
+			bo_say_record(fault, "held by", r, now);
+			holders++;
+		}
+		if (r->released != 0)
+			continue;
+		if (r->address + r->size <= fault && (!below || r->address > below->address))
+			below = r;
+		if (r->address > fault && (!above || r->address < above->address))
+			above = r;
+	}
+	if (holders == 0)
+		printf("adreno8: fault %#x: no BO in the last %u reservations held this address\n", fault,
+		    BO_HISTORY);
+	if (below)
+		bo_say_record(fault, "nearest live below:", below, now);
+	if (above)
+		bo_say_record(fault, "nearest live above:", above, now);
+	adreno8_gpu_hang_dump();
+	adreno8_context_describe_inflight();
+}
+
+void
+adreno8_bo_describe_owner(const char *what, uint32_t address)
+{
+	uint64_t now = mach_absolute_time();
+	unsigned matches = 0;
+
+	for (uint32_t i = 1; i <= BO_HISTORY; i++) {
+		const struct bo_record *r = &bo_history[(bo_history_next - i) % BO_HISTORY];
+
+		if (r->reserved == 0)
+			continue;
+		if (address >= r->address && address - r->address < r->size) {
+			bo_say_record(address, what, r, now);
+			if (++matches >= 2)
+				return;
+		}
+	}
+	if (matches == 0)
+		printf("adreno8: %s %#x: no matching BO in last %u reservations\n", what, address, BO_HISTORY);
+}
+
+/* The pages entered since the last commit, which cleans just their entries out of the cache. */
+static uint64_t bo_mapped_low = UINT64_MAX, bo_mapped_high;
 
 uint64_t
 adreno8_bo_reserve(uint64_t size)
 {
 	uint32_t address, from = bo_free_from;
+	uint64_t span = size + SMMU_GRANULE;   /* the BO and its guard page */
 	if (!adreno8_bo_ready()) return 0;
-	if (!bo_range(ADRENO8_GPU_IOVA_START, size) ||
-	    (!adreno8_space_find_range(&adreno8_gpu_space, from, ADRENO8_GPU_IOVA_END, (uint32_t)size, SMMU_GRANULE, &address) &&
+	/* size 0 has to be refused here: its span is the guard page alone, which bo_range accepts */
+	if (!size || !bo_range(ADRENO8_GPU_IOVA_START, span) ||
+	    (!adreno8_space_find_range(&adreno8_gpu_space, from, ADRENO8_GPU_IOVA_END, (uint32_t)span, SMMU_GRANULE, &address) &&
 	    (from == ADRENO8_GPU_IOVA_START || !adreno8_space_find_range(&adreno8_gpu_space, ADRENO8_GPU_IOVA_START,
-	    ADRENO8_GPU_IOVA_END, (uint32_t)size, SMMU_GRANULE, &address)))) {
-		bo_fail("IOVA reservation");
+	    ADRENO8_GPU_IOVA_END, (uint32_t)span, SMMU_GRANULE, &address)))) {
+		printf("adreno8: no GPU addresses for a buffer of %llu KB: this one buffer is refused\n", size >> 10);
 		return 0;
 	}
-	/* Populate tables before marking any leaf. A partial table allocation is
-	 * retained on failure and no physical BO page has been exposed yet. */
-	for (uint64_t at = 0; at < size; at += SMMU_GRANULE) {
+	/* Populate tables before marking any leaf. A partial table allocation is retained on failure
+	 * and no physical BO page has been exposed yet, so only this buffer is refused: closing all
+	 * submissions here turned one missing table into a dead compositor (kernel-12377-cmd31-warm5). */
+	for (uint64_t at = 0; at < span; at += SMMU_GRANULE) {
 		if (!adreno8_space_prepare_page(&adreno8_gpu_space, address + at)) {
-			bo_fail("reservation tables");
+			printf("adreno8: no page table for GPU address %#llx: a buffer of %llu KB is refused\n",
+			    address + at, size >> 10);
 			return 0;
 		}
 	}
 	for (uint64_t at = 0; at < size; at += SMMU_GRANULE)
 		*adreno8_space_entry(&adreno8_gpu_space, address + at) = ADRENO8_PTE_EXTERNAL;
-	/* (the pages it passes over stay in use until a release brings it back below them) */
-	for (uint64_t *entry; bo_free_from < ADRENO8_GPU_IOVA_END &&
-	    (entry = adreno8_space_entry(&adreno8_gpu_space, bo_free_from)) != NULL && *entry != 0;
-	    bo_free_from += SMMU_GRANULE) {
-	}
+	/* published with the BO's own pages at the next commit */
+	*adreno8_space_entry(&adreno8_gpu_space, address + size) = bo_guard_pte;
+	if (address + size < bo_mapped_low) bo_mapped_low = address + size;
+	if (address + span > bo_mapped_high) bo_mapped_high = address + span;
+	bo_note_reserve(address, size);
+	bo_free_from = address + span < ADRENO8_GPU_IOVA_START + BO_WINDOW ? (uint32_t)(address + span) : ADRENO8_GPU_IOVA_START;
 	return address;
 }
-
-/* The pages entered since the last commit, which cleans just their entries out of the cache. */
-static uint64_t bo_mapped_low = UINT64_MAX, bo_mapped_high;
 
 /* One page of a buffer: the GPU's health is checked at its reservation and at its commit. */
 bool
@@ -143,25 +289,25 @@ bo_owned(uint64_t pte)
 	    attributes == adreno8_space_attributes(prot | ADRENO8_MEM_WRITE));
 }
 
-/* Each unmap waits for the GPU to be idle: how often, and how long, every 5 s while it goes on. */
+/* How many unmaps, and the time in them (TLB synchronization), every 5 s while they go on. */
 static struct {
 	uint32_t count;
-	uint64_t since, waiting;
+	uint64_t since, spent;
 } unmap_cost;
 
 static void
 unmap_note(uint64_t began, uint64_t ended)
 {
-	uint64_t span, waiting;
+	uint64_t span, spent;
 
 	unmap_cost.count++;
-	unmap_cost.waiting += ended - began;
+	unmap_cost.spent += ended - began;
 	if (unmap_cost.since == 0) unmap_cost.since = began;
 	absolutetime_to_nanoseconds(ended - unmap_cost.since, &span);
 	if (span < 5 * NSEC_PER_SEC) return;
-	absolutetime_to_nanoseconds(unmap_cost.waiting, &waiting);
-	printf("adreno8: %u external buffers unmapped in %llu ms, %llu us waiting for the GPU to be idle in all\n",
-	    unmap_cost.count, span / NSEC_PER_MSEC, waiting / 1000);
+	absolutetime_to_nanoseconds(unmap_cost.spent, &spent);
+	printf("adreno8: %u external buffers unmapped in %llu ms, %llu us in the unmaps\n",
+	    unmap_cost.count, span / NSEC_PER_MSEC, spent / 1000);
 	memset(&unmap_cost, 0, sizeof(unmap_cost));
 }
 
@@ -174,12 +320,297 @@ adreno8_bo_unmap(uint64_t address, uint64_t size)
 		uint64_t *entry = adreno8_space_entry(&adreno8_gpu_space, (uint32_t)(address + at));
 		if (!entry || !bo_owned(*entry)) return bo_fail("unmap ownership");
 	}
+	/* No wait for the GPU: the caller unmaps only once every submission that could still read the
+	 * buffer has retired (the service's freeBuffer(), hakios.gpu_service_memory.inc: a buffer's own fence
+	 * is looked at, the latest of those of the submissions that named it). */
 	uint64_t began = mach_absolute_time();
-	if (!adreno8_context_wait_idle("external BO unmap")) return bo_fail("unmap idle");
-	unmap_note(began, mach_absolute_time());
 	for (uint64_t at = 0; at < size; at += SMMU_GRANULE)
 		*adreno8_space_entry(&adreno8_gpu_space, (uint32_t)(address + at)) = ADRENO8_PTE_EXTERNAL;
-	return adreno8_space_publish_range(&adreno8_gpu_space, address, size) || bo_fail("unmap TLB synchronization");
+	bool published = adreno8_space_publish_range(&adreno8_gpu_space, address, size);
+	unmap_note(began, mach_absolute_time());
+	return published || bo_fail("unmap TLB synchronization");
+}
+
+extern unsigned int ml_phys_read_word(vm_offset_t paddr);
+
+/* The dword at GPU address `at`, read through the CB0 page table; false for an unmapped page. */
+static bool
+bo_word(uint64_t at, uint32_t *word)
+{
+	uint64_t *entry = at < ADRENO8_GPU_IOVA_END ?
+	    adreno8_space_entry(&adreno8_gpu_space, (uint32_t)(at & ~(uint64_t)SMMU_GRANULE_MASK)) : NULL;
+
+	if (!entry || !(*entry & 1))
+		return false;
+	*word = ml_phys_read_word((vm_offset_t)((*entry & PTE_ADDRESS) | (at & SMMU_GRANULE_MASK)));
+	return true;
+}
+
+void
+adreno8_bo_dump_words(const char *what, uint64_t address, uint32_t count)
+{
+	address &= ~3ull;
+	for (uint32_t i = 0; i < count; i += 8) {
+		char line[160];
+		int used = snprintf(line, sizeof(line), "adreno8: %s %#llx:", what, address + 4ull * i);
+
+		for (uint32_t j = i; j < count && j < i + 8 && used < (int)sizeof(line) - 10; j++) {
+			uint32_t word;
+
+			used += bo_word(address + 4ull * j, &word) ?
+			    snprintf(line + used, sizeof(line) - used, " %08x", word) :
+			    snprintf(line + used, sizeof(line) - used, " unmapped");
+		}
+		printf("%s\n", line);
+	}
+}
+
+/* Packet opcodes and registers the walk follows (Mesa adreno_pm4.xml and a6xx.xml, A8XX). */
+#define PM4_LOAD_STATE6 0x30
+#define PM4_LOAD_STATE6_GEOM 0x32
+#define PM4_LOAD_STATE6_FRAG 0x34
+#define PM4_INDIRECT_BUFFER 0x3f
+#define PM4_INDIRECT_BUFFER_CHAIN 0x57
+#define PM4_SET_DRAW_STATE 0x43
+#define PM4_CONTEXT_REG_BUNCH 0x5c
+#define PM4_STATE_SRC_INDIRECT 2
+#define PM4_STATE_TYPE_CONSTANTS 1
+#define DRAW_STATE_DISABLE (1u << 17)
+#define BINDLESS_SETS 8
+#define BINDLESS_SLOTS 64
+#define BINDLESS_BASE_CS 0xa9e8
+#define BINDLESS_BASE_GFX 0xab0a
+#define BINDLESS_SEEN_MAX 32
+#define INDIRECT_SEEN_MAX 256
+#define CODE_SEEN_MAX 96
+#define CODE_WORDS 128        /* the preamble and the start of the body: where a shader loads from its UBOs */
+#define SP_VS_BASE_LO 0xa81c
+#define SP_PS_BASE_LO 0xa983
+#define INDIRECT_MAX_DWORDS 1024
+/* Mesa's fb-read descriptors: IR3_BINDLESS_DESC_COUNT - 1 - A6XX_MAX_RENDER_TARGETS, 16 dwords each. */
+#define FB_READ_FIRST_SLOT 55
+#define FB_READ_SLOTS 4
+#define TREE_BUFFERS 2048
+#define TREE_WORDS 49152
+#define TREE_DEPTH 3
+
+struct bo_bindless_rec {
+	uint64_t base;
+	uint8_t set;
+	bool cs;
+};
+
+struct bo_indirect_rec {
+	uint64_t base;
+	uint32_t words;
+	uint8_t state_type;
+};
+
+struct bo_tree {
+	uint64_t seen[TREE_BUFFERS];
+	unsigned buffers;
+	uint32_t words;
+	uint64_t gfx_bindless_cur[BINDLESS_SETS];
+	uint64_t cs_bindless_cur[BINDLESS_SETS];
+	struct bo_bindless_rec bindless_seen[BINDLESS_SEEN_MAX];
+	unsigned bindless_count;
+	struct bo_indirect_rec indirect_seen[INDIRECT_SEEN_MAX];
+	unsigned indirect_count;
+	uint32_t code_seen[CODE_SEEN_MAX];      /* SP_VS_BASE and SP_PS_BASE values, low words */
+	unsigned code_count;
+};
+
+static void
+bo_tree_record_bindless(struct bo_tree *tree, uint64_t base, uint8_t set, bool cs)
+{
+	if (!base)
+		return;
+	for (unsigned i = 0; i < tree->bindless_count; i++) {
+		if (tree->bindless_seen[i].base == base &&
+		    tree->bindless_seen[i].set == set &&
+		    tree->bindless_seen[i].cs == cs)
+			return;
+	}
+	if (tree->bindless_count < BINDLESS_SEEN_MAX) {
+		tree->bindless_seen[tree->bindless_count++] = (struct bo_bindless_rec){
+			.base = base, .set = set, .cs = cs,
+		};
+	}
+}
+
+static void
+bo_tree_record_indirect(struct bo_tree *tree, uint64_t base, uint32_t words, uint8_t state_type)
+{
+	if (!base || !words)
+		return;
+	for (unsigned i = 0; i < tree->indirect_count; i++) {
+		if (tree->indirect_seen[i].base == base &&
+		    tree->indirect_seen[i].words == words)
+			return;
+	}
+	if (tree->indirect_count < INDIRECT_SEEN_MAX) {
+		tree->indirect_seen[tree->indirect_count++] = (struct bo_indirect_rec){
+			.base = base, .words = words, .state_type = state_type,
+		};
+	}
+}
+
+static void
+bo_tree_reg(struct bo_tree *tree, uint32_t reg, uint32_t value)
+{
+	uint64_t *cur;
+	uint8_t set;
+	bool is_hi, is_cs;
+
+	if (reg >= BINDLESS_BASE_GFX && reg < BINDLESS_BASE_GFX + BINDLESS_SETS * 2) {
+		uint32_t off = reg - BINDLESS_BASE_GFX;
+		set = (uint8_t)(off / 2);
+		is_hi = (off & 1u) != 0;
+		is_cs = false;
+		cur = &tree->gfx_bindless_cur[set];
+	} else if (reg >= BINDLESS_BASE_CS && reg < BINDLESS_BASE_CS + BINDLESS_SETS * 2) {
+		uint32_t off = reg - BINDLESS_BASE_CS;
+		set = (uint8_t)(off / 2);
+		is_hi = (off & 1u) != 0;
+		is_cs = true;
+		cur = &tree->cs_bindless_cur[set];
+	} else if (reg == SP_VS_BASE_LO || reg == SP_PS_BASE_LO) {
+		for (unsigned i = 0; i < tree->code_count; i++)
+			if (tree->code_seen[i] == value)
+				return;
+		if (value != 0 && tree->code_count < CODE_SEEN_MAX)
+			tree->code_seen[tree->code_count++] = value;
+		return;
+	} else {
+		return;
+	}
+	if (is_hi) {
+		*cur = (*cur & 0xffffffffull) | ((uint64_t)value << 32);
+		bo_tree_record_bindless(tree, *cur, set, is_cs);
+	} else {
+		*cur = (*cur & ~0xffffffffull) | (value & ~3u);
+	}
+}
+
+static void
+bo_tree_walk(struct bo_tree *tree, uint64_t base, uint32_t count, unsigned depth)
+{
+	for (unsigned i = 0; i < tree->buffers; i++)
+		if (tree->seen[i] == base)
+			return;
+	if (tree->buffers == TREE_BUFFERS) {
+		printf("adreno8: tree %#llx (%u words) skipped: over %u buffers\n", base, count, TREE_BUFFERS);
+		return;
+	}
+	tree->seen[tree->buffers++] = base;
+	if (tree->words + count <= TREE_WORDS) {
+		char what[32];
+		tree->words += count;
+		snprintf(what, sizeof(what), "tree %u of %u", depth, count);
+		adreno8_bo_dump_words(what, base, count);
+	} else {
+		printf("adreno8: tree %#llx (%u words) not printed: over the dump's size\n", base, count);
+	}
+
+	for (uint32_t at = 0; at < count;) {
+		uint32_t header, size, a, b, c;
+
+		if (!bo_word(base + 4ull * at, &header))
+			return;
+		if (header >> 28 == 7)
+			size = header & 0x7fff;
+		else if (header >> 28 == 4)
+			size = header & 0x7f;
+		else
+			return;
+
+		uint32_t opcode = (header >> 16) & 0x7f;
+		uint64_t body = base + 4ull * (at + 1);
+		if (header >> 28 == 4) {
+			for (uint32_t i = 0; i < size && bo_word(body + 4ull * i, &a); i++)
+				bo_tree_reg(tree, ((header >> 8) & 0x3ffff) + i, a);
+		} else if (opcode == PM4_CONTEXT_REG_BUNCH) {
+			for (uint32_t i = 0; i + 1 < size && bo_word(body + 4ull * i, &a) &&
+			     bo_word(body + 4ull * (i + 1), &b); i += 2)
+				bo_tree_reg(tree, a, b);
+		} else if ((opcode == PM4_INDIRECT_BUFFER || opcode == PM4_INDIRECT_BUFFER_CHAIN) &&
+		    size >= 3 && depth < TREE_DEPTH && bo_word(body, &a) && bo_word(body + 4, &b) &&
+		    bo_word(body + 8, &c)) {
+			bo_tree_walk(tree, a | (uint64_t)b << 32, c & 0xfffff, depth + 1);
+		} else if (opcode == PM4_SET_DRAW_STATE && depth < TREE_DEPTH) {
+			for (uint32_t i = 0; i + 3 <= size && bo_word(body + 4ull * i, &a) &&
+			     bo_word(body + 4ull * (i + 1), &b) && bo_word(body + 4ull * (i + 2), &c); i += 3)
+				if ((a & 0xffff) && !(a & DRAW_STATE_DISABLE))
+					bo_tree_walk(tree, b | (uint64_t)c << 32, a & 0xffff, depth + 1);
+		} else if ((opcode == PM4_LOAD_STATE6 || opcode == PM4_LOAD_STATE6_GEOM ||
+		    opcode == PM4_LOAD_STATE6_FRAG) && size >= 3 && bo_word(body, &a) &&
+		    bo_word(body + 4, &b) && bo_word(body + 8, &c)) {
+			uint32_t state_src = (a >> 16) & 3u;
+			uint32_t state_type = (a >> 14) & 3u;
+			uint32_t num_unit = (a >> 22) & 0x3ffu;
+			if (state_src == PM4_STATE_SRC_INDIRECT && num_unit > 0) {
+				uint32_t dwords = num_unit * (state_type == PM4_STATE_TYPE_CONSTANTS ? 16u : 4u);
+				if (dwords > INDIRECT_MAX_DWORDS)
+					dwords = INDIRECT_MAX_DWORDS;
+				bo_tree_record_indirect(tree, b | ((uint64_t)c << 32), dwords,
+				    (uint8_t)state_type);
+			}
+		}
+		at += size + 1;
+	}
+}
+
+void
+adreno8_bo_dump_tree(uint64_t base, uint32_t count)
+{
+	static struct bo_tree tree;
+
+	memset(&tree, 0, sizeof(tree));
+	bo_tree_walk(&tree, base, count, 0);
+	for (uint8_t s = 0; s < BINDLESS_SETS; s++) {
+		bo_tree_record_bindless(&tree, tree.gfx_bindless_cur[s], s, false);
+		bo_tree_record_bindless(&tree, tree.cs_bindless_cur[s], s, true);
+	}
+	for (unsigned i = 0; i < tree.indirect_count; i++) {
+		const char *kind = tree.indirect_seen[i].state_type == PM4_STATE_TYPE_CONSTANTS ?
+		    "indirect tex" : "indirect samp";
+		adreno8_bo_dump_words(kind, tree.indirect_seen[i].base, tree.indirect_seen[i].words);
+	}
+	for (unsigned i = 0; i < tree.bindless_count; i++) {
+		const struct bo_bindless_rec *rec = &tree.bindless_seen[i];
+		for (unsigned slot = 0; slot < BINDLESS_SLOTS; slot++) {
+			uint64_t addr = rec->base + 64ull * slot;
+			bool any = false, all_ok = true;
+			for (uint32_t w = 0; w < 16; w++) {
+				uint32_t word = 0;
+				if (!bo_word(addr + 4ull * w, &word)) {
+					all_ok = false;
+					break;
+				}
+				if (word != 0)
+					any = true;
+			}
+			if (any || (!all_ok && slot == 0)) {
+				char what[48];
+				snprintf(what, sizeof(what), "%s bindless %u slot %u",
+				    rec->cs ? "cs" : "gfx", rec->set, slot);
+				adreno8_bo_dump_words(what, addr, 16);
+			}
+		}
+	}
+	for (unsigned i = 0; i < tree.code_count; i++)
+		adreno8_bo_dump_words("code", tree.code_seen[i], CODE_WORDS);
+	uint64_t bindless_fs = tree.gfx_bindless_cur[4];
+	if (!bindless_fs) {
+		printf("adreno8: tree: no write to SP_GFX_BINDLESS_BASE[4]\n");
+		return;
+	}
+	for (unsigned slot = FB_READ_FIRST_SLOT; slot < FB_READ_FIRST_SLOT + FB_READ_SLOTS; slot++) {
+		char what[48];
+
+		snprintf(what, sizeof(what), "fs bindless slot %u", slot);
+		adreno8_bo_dump_words(what, bindless_fs + 64ull * slot, 16);
+	}
 }
 
 bool
@@ -191,8 +622,13 @@ adreno8_bo_release(uint64_t address, uint64_t size)
 		uint64_t *entry = adreno8_space_entry(&adreno8_gpu_space, (uint32_t)(address + at));
 		if (!entry || *entry != ADRENO8_PTE_EXTERNAL) return bo_fail("release ownership");
 	}
+	uint64_t *guard = adreno8_space_entry(&adreno8_gpu_space, (uint32_t)(address + size));
+	if (!guard || *guard != bo_guard_pte) return bo_fail("release guard page");
+	/* The guard's TLB entry may outlive this: it names the zero page, read-only, and the next
+	 * BO placed here is published before the GPU is given it. */
+	*guard = 0;
 	for (uint64_t at = 0; at < size; at += SMMU_GRANULE)
 		*adreno8_space_entry(&adreno8_gpu_space, (uint32_t)(address + at)) = 0;
-	if (address < bo_free_from) bo_free_from = (uint32_t)address;
+	bo_note_release(address, size);
 	return true;
 }

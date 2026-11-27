@@ -13608,7 +13608,7 @@ index 68decaa..124b5e4 100755
                  lines.append("%-40s optional %s" % (path, " ".join([d.tag] + tags)))
      return lines + [FILES_END]
 diff --git a/userland/build.sh b/userland/build.sh
-index c604123..b8147a9 100755
+index c604123..fdf8ec6 100755
 --- a/userland/build.sh
 +++ b/userland/build.sh
 @@ -104,6 +104,11 @@ for d in rootfs cryptex cryptex-app; do
@@ -13728,22 +13728,32 @@ index c604123..b8147a9 100755
  				-I$HM/include -o obj/HakiosMetal src/HakiosMetalCA.m $METAL_GPU $M2V_OBJS
  		else
  		$DYN -bundle -framework Foundation -framework Metal -lobjc -I$METAL_SRC -o obj/HakiosMetal $METAL_SRC/HakiosMetal.m \
-@@ -313,8 +375,13 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -313,8 +375,22 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  			# the OpenGL ES library, and the table of functions that hands CoreAnimation's calls to it
  			# (Mesa says beside the library what it was built from: one from other patches is built again)
  			M=../xnu-deps/build/mesa/out
+-			[ "$(cat $M/built-from 2>/dev/null)" = "$(cat ../tools/mesa/*.patch ../tools/mesa/hakios-drm/* | sha256sum)" ] ||
+-				../tools/mk-mesa.sh
 +			# the active out/ may be this tree's own Mesa 25 build or Mesa 26 (the ios-dodge
 +			# verified Freedreno/Gen8 OSMesa of this phone's port, in its device repository:
 +			# devices/dodge/mesa-files; its stamp is the port patch's hash) -- accept either,
 +			# rebuild the 26 one when neither matches
- 			[ "$(cat $M/built-from 2>/dev/null)" = "$(cat ../tools/mesa/*.patch ../tools/mesa/hakios-drm/* | sha256sum)" ] ||
--				../tools/mk-mesa.sh
-+				[ "$(cat $M/built-from 2>/dev/null)" = "$(cat ../devices/dodge/mesa-files/mesa-26.2.5-op13.patch | sha256sum)" ] ||
-+				../devices/dodge/mesa-files/mk-mesa26.sh
++			# The K90 fixes are this device's own layer on top of the port layer: where that
++			# patch is beside the port patch, only a build made from BOTH is taken -- one made
++			# from the port patch alone fails the same way and looks like a missing fix.
++			K90FIX=../devices/dodge/mesa-files/mesa-26.2.5-k90-fixes.patch
++			if [ -f "$K90FIX" ]; then
++				[ "$(cat $M/built-from 2>/dev/null)" = "$(cat ../devices/dodge/mesa-files/mesa-26.2.5-op13.patch $K90FIX | sha256sum)" ] ||
++					../devices/dodge/mesa-files/mk-mesa26.sh
++			else
++				[ "$(cat $M/built-from 2>/dev/null)" = "$(cat ../tools/mesa/*.patch ../tools/mesa/hakios-drm/* | sha256sum)" ] ||
++					[ "$(cat $M/built-from 2>/dev/null)" = "$(cat ../devices/dodge/mesa-files/mesa-26.2.5-op13.patch | sha256sum)" ] ||
++					../devices/dodge/mesa-files/mk-mesa26.sh
++			fi
  			./mkeagl.py src/eagl_slots.txt $M/gl.xml $M/exported-gl.txt src/eagl.c > obj/eagl_gen.h
  			$DYN -dynamiclib -install_name /redwood/lib/libhakios.gl.dylib -Iobj -framework CoreFoundation \
  				-framework IOKit -framework IOSurface -lobjc $M/libOSMesa.8.dylib -o obj/libhakios.gl.dylib \
-@@ -372,6 +439,8 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -372,6 +448,8 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  	mkdir -p root/lib
  	cp obj/libhakios.dylib obj/libhakios.sb.dylib root/lib/
  	[ -f obj/libhakios.media.dylib ] && cp obj/libhakios.media.dylib root/lib/     # (as with cpu_test)
@@ -13752,7 +13762,7 @@ index c604123..b8147a9 100755
  	[ -f obj/libhakios.app.dylib ] && cp obj/libhakios.app.dylib root/lib/
  	[ -f obj/libhakios.tweaks.dylib ] && cp obj/libhakios.tweaks.dylib root/lib/
  	if [ -f obj/HakiosAudio ]; then
-@@ -465,7 +534,12 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -465,7 +543,12 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  	cp com.hakios.demo.plist com.hakios.wifi.plist root/LaunchDaemons/
  	VOLUME=""
  	[ -n "$FLASHBOOT" ] && [ -f $DARWIN/rootfs.slt ] && VOLUME="--root-volume $DARWIN/rootfs.slt"
@@ -13766,7 +13776,7 @@ index c604123..b8147a9 100755
  fi
  # firmware of the phone's own hardware, where somebody has pulled it from the phone's Android into ../fw-gpu
  # (it is the vendor's and never in the repository): the kernel's GPU bring-up, drivers/gpu/hakios.adreno.c, finds it in fw/
-@@ -486,7 +560,41 @@ if [ -f ../fw-wifi/wpss.mdt ]; then
+@@ -486,7 +569,41 @@ if [ -f ../fw-wifi/wpss.mdt ]; then
  	# so not in the repository; it goes where the firmware goes and the kernel reads it there (wifi_join=1)
  	rm -f root/fw/network
  	# SHARE=1: leave it out, for an image that is going to somebody else -- it is a passphrase
@@ -13809,7 +13819,7 @@ index c604123..b8147a9 100755
  fi
  # ... and the vibration motor's waveforms, the phone's /vendor/firmware/aw8697_haptic.bin, from ../fw-haptic
  # (drivers/haptic/hakios.haptic.c, haptic=3; 3.6 KB, the vendor's and not in the repository either)
-@@ -513,11 +621,23 @@ for tuned in ../fw-camera/com.qti.tuned.hakios_*.bin; do
+@@ -513,11 +630,23 @@ for tuned in ../fw-camera/com.qti.tuned.hakios_*.bin; do
  	../tools/camtuning.py "$tuned" "root/fw/camera-$sensor.isp" >/dev/null
  done
  # ... and with ADSP=1 the image of the audio DSP, from the same place into ../fw-audio (drivers/audio/hakios.adsp.c):
@@ -13836,7 +13846,7 @@ index c604123..b8147a9 100755
  fi
  # Firmware that is not there is otherwise silent at build time and speaks only much later, deep in a
  # device log -- "adreno: THE GPU IS NOT STARTED: the small image has no fw/a660_gmu.bin" cost a phone
-@@ -566,6 +686,10 @@ done
+@@ -566,6 +695,10 @@ done
  python3 ../tools/apfs/mkapfs.py -z --plain fw -o root.apfs redwood=root | tail -1
  [ -z "$CHECK" ] || ../tools/apfs/check-image.sh root.apfs redwood=root
  
@@ -13847,7 +13857,7 @@ index c604123..b8147a9 100755
  # --- the RAM part of a boot off the flash: FLASHBOOT=1 -> flashboot.apfs --------------------------------
  # With the Darwin volume on the phone's flash as the root, all that has to come from RAM is what is not
  # on it -- the two cryptexes, OS with the dyld shared cache and App -- and what starts the boot: three
-@@ -671,15 +795,16 @@ if [ -f $DARWIN/system.manifest ] && [ -f $CACHE/dyld_shared_cache_arm64 ] &&
+@@ -671,15 +804,16 @@ if [ -f $DARWIN/system.manifest ] && [ -f $CACHE/dyld_shared_cache_arm64 ] &&
  	fi
  	mv sysroot/sbin/launchd sysroot/sbin/launchd.darwin
  	cp obj/stage0 sysroot/sbin/launchd
@@ -14099,7 +14109,7 @@ index 0000000..1a4ab90
 + }
 +}
 diff --git a/userland/src/eagl.c b/userland/src/eagl.c
-index 3c359ee..e897d9c 100644
+index 3c359ee..595fcbd 100644
 --- a/userland/src/eagl.c
 +++ b/userland/src/eagl.c
 @@ -242,15 +242,24 @@ struct image {
@@ -14192,6 +14202,47 @@ index 3c359ee..e897d9c 100644
  	}
  	if (e->frames == 30 || e->frames % 200 == 0) {
  		summary(e);
+@@ -2980,7 +3019,7 @@ group_draw_end(struct eagl *e, const GLint enabled[4])
+ }
+ 
+ static bool
+-plain_draw_begin(struct eagl *e, GLint enabled[4])
++plain_draw_begin(struct eagl *e, GLint enabled[4], bool glyph_spans)
+ {
+ 	static const GLfloat identity[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+ 	static uint8_t said[90];
+@@ -3020,7 +3059,12 @@ plain_draw_begin(struct eagl *e, GLint enabled[4])
+ 	 * its own memory -- nothing -- and wrote that over everything: every launch image SpringBoard
+ 	 * keeps came out black, and with it the zoom that opens an application the first time.
+ 	 */
+-	if (!plain_draws || (plain_draws == 1 && e->bound[0] == 0) || reads_what_it_writes(e) ||
++	/* CoreAnimation also fills glyphs with untextured GL_LINES and program 0.
++	 * ES has no fixed-function program: skipping these spans loses icon labels.
++	 * Keep the exception limited to lines; untextured full-screen triangles
++	 * must still be skipped (they otherwise paint the entire surface white).
++	 */
++	if (!plain_draws || (plain_draws == 1 && e->bound[0] == 0 && !glyph_spans) || reads_what_it_writes(e) ||
+ 	    (e->colour != 0 && e->colour == e->bound[0])) {
+ 		census_draw(e, function, CENSUS_NOT_DRAWN);
+ 		return false;
+@@ -3272,7 +3316,7 @@ my_glDrawArrays(void *context, GLenum mode, GLint first, GLsizei count)
+ 		glDrawArrays(mode, first, count);
+ 		group_draw_end(e, enabled);
+ 	} else {
+-		plain = plain_draw_begin(e, enabled);
++		plain = plain_draw_begin(e, enabled, mode == GL_LINES);
+ 		glDrawArrays(mode, first, count);
+ 		if (plain) {
+ 			plain_draw_end(e, enabled);
+@@ -3312,7 +3356,7 @@ my_glDrawElements(void *context, GLenum mode, GLsizei count, GLenum type, const
+ 		glDrawElements(mode, count, type, indices);
+ 		group_draw_end(e, enabled);
+ 	} else {
+-		plain = plain_draw_begin(e, enabled);
++		plain = plain_draw_begin(e, enabled, mode == GL_LINES);
+ 		glDrawElements(mode, count, type, indices);
+ 		if (plain) {
+ 			plain_draw_end(e, enabled);
 diff --git a/userland/src/flashlight.inc b/userland/src/flashlight.inc
 new file mode 100644
 index 0000000..e2f35a5

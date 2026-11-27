@@ -7,6 +7,10 @@
 /* OOB and command initialization stay owned by adreno8_gpu.c. */
 bool adreno8_gpu_commands_ready(void);
 bool adreno8_gpu_wait_idle(const char *what);
+/* After a reported hang: the RBBM and CP status, and for each pipe the IB levels the CP is in
+ * with the command words around its position. Reads only, once per boot; prints one line when GX
+ * is off. */
+void adreno8_gpu_hang_dump(void);
 
 /* Pages and aliases remain allocated until cold reset, including after close.
  * A confirmed close permits registration again; any failure closes this boot. */
@@ -17,11 +21,17 @@ uint32_t adreno8_context_submit(const uint64_t *addresses, const uint32_t *words
 /* Completion requires EOP memory and healthy transport/device state. */
 bool adreno8_context_done(uint32_t timestamp);
 uint32_t adreno8_context_last(void);
+uint32_t adreno8_context_retired(void);
 uint32_t adreno8_context_depth(void);
+/* Whether the context is one to submit to. Asked by nothing in this tree yet: the newer kernel's GPU service asks it of
+ * its own wait for room (adreno8_service.c there), whose patience is longer than the context's. */
+bool adreno8_context_live(void);
+void adreno8_context_describe_inflight(void);
 bool adreno8_context_close(void);
 bool adreno8_context_test(void);
 /* Require the completed stage-22 self-test, latest EOP and GPU idle. The caller
  * keeps submissions serialized until its page-table operation has finished. */
 bool adreno8_context_wait_idle(const char *what);
+bool adreno8_context_drained(const char *what, uint32_t limit_us);
 
 #endif

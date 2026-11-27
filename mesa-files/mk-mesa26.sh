@@ -3,6 +3,11 @@
 # The port layer is ios-dodge's device-verified consolidated patch (Darwin DRM on the
 # kernel's HakiosGPU user client, restored OSMesa 26 frontends, Freedreno Gen8 fixes);
 # the one adaptation is the GPU service name (their tree says RedwoodGPU, ours HakiosGPU).
+# On top of it, mesa-26.2.5-k90-fixes.patch: the fixes of the REDMI K90 port's rebase-26
+# layer that this one had not taken (the A830 without early preambles and without the
+# fragment texture prefetch, a linear import whose last rows are padded drawn in sysmem,
+# no shadow of imported buffers, zeroed descriptors for unbound texture and UBO slots, the
+# framebuffer read bound to layer 0, NULL checks where a buffer allocation may fail).
 #
 #   out/libOSMesa.8.dylib   the library (GL=1 of userland/build.sh puts it in the image)
 #   out/exported-gl.txt     the gl* functions it exports, for userland/mkeagl.py
@@ -25,15 +30,18 @@ SHA256=794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5
 # carries it as it was verified on that phone, with thanks); only the Mesa tarball comes
 # down, from Mesa's own archive. The one adaptation this port makes -- the GPU service's
 # name -- is the sed below. The patch sits beside this script.
-PORT=$(cd "$(dirname "$0")" && pwd)/mesa-26.2.5-op13.patch
+HERE_MESA=$(cd "$(dirname "$0")" && pwd)
+PORT=$HERE_MESA/mesa-26.2.5-op13.patch
 [ -f "$PORT" ] || { echo "mk-mesa26.sh: no mesa-26.2.5-op13.patch beside this script" >&2; exit 1; }
+K90FIX=$HERE_MESA/mesa-26.2.5-k90-fixes.patch
+[ -f "$K90FIX" ] || { echo "mk-mesa26.sh: no mesa-26.2.5-k90-fixes.patch beside this script" >&2; exit 1; }
 mkdir -p "$B"; cd "$B"
 
 [ -f mesa-$VERSION.tar.xz ] || \
 		curl -sL --fail --retry 3 -o mesa-$VERSION.tar.xz https://archive.mesa3d.org/mesa-$VERSION.tar.xz
 echo "$SHA256  mesa-$VERSION.tar.xz" | sha256sum -c --quiet
 
-STAMP=$(cat "$PORT" | sha256sum | cut -d' ' -f1)
+STAMP=$(cat "$PORT" "$K90FIX" | sha256sum | cut -d' ' -f1)
 if [ ! -d mesa-$VERSION ] || [ "$(cat mesa-$VERSION/.op13-patch 2>/dev/null)" != "$STAMP" ]; then
 	rm -rf mesa-$VERSION
 	tar xJf mesa-$VERSION.tar.xz
@@ -43,6 +51,8 @@ if [ ! -d mesa-$VERSION ] || [ "$(cat mesa-$VERSION/.op13-patch 2>/dev/null)" !=
 	grep -rl RedwoodGPU mesa-$VERSION | while read -r f; do
 		sed -i 's/RedwoodGPU/HakiosGPU/g' "$f"
 	done
+	# the K90 fixes, after the port layer and the GPU service's name: written against that state
+	patch -s --batch --forward -d mesa-$VERSION -p1 < "$K90FIX"
 	echo "$STAMP" > mesa-$VERSION/.op13-patch
 fi
 # a private venv for Mesa's builders: Mako and a pinned Meson (26.x requires >= 1.4 and
@@ -113,4 +123,4 @@ echo "mk-mesa26: out26/libOSMesa.8.dylib $(stat -c%s out26/libOSMesa.8.dylib) by
 # install as the active out/ (whatever earlier output there was is kept beside it)
 if [ ! -d out25 ] && [ -d out ]; then mv out out25; fi
 rm -rf out && mv out26 out
-cat "$PORT" | sha256sum > out/built-from
+cat "$PORT" "$K90FIX" | sha256sum > out/built-from

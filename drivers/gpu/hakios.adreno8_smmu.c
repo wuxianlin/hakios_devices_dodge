@@ -3,6 +3,7 @@
  * The ladder, the boot-args and what is not settled: see adreno8.c; the shared world: adreno8_private.h.
  */
 #include "hakios.adreno8_smmu_private.h"
+#include "hakios.adreno8_bo_private.h"
 
 #define printf adreno8_say
 
@@ -425,7 +426,14 @@ adreno8_space_publish_range(struct adreno8_gpu_space *space, uint64_t address, u
 		}
 		adreno8_to_memory((vm_offset_t)entry, (vm_size_t)((stop - at) / SMMU_GRANULE * sizeof(*entry)));
 	}
-	return publish_sync(space, size / SMMU_GRANULE * sizeof(uint64_t), began);
+	uint64_t cleaned = mach_absolute_time();
+	bool quiet = adreno8_quiet, synced;
+
+	adreno8_quiet = true;
+	synced = adreno8_smmu_tlb_invalidate_range(space, address, size);
+	adreno8_quiet = quiet;
+	publish_note(size / SMMU_GRANULE * sizeof(uint64_t), began, cleaned, mach_absolute_time());
+	return synced;
 }
 
 bool
@@ -440,10 +448,28 @@ adreno8_space_find_range(struct adreno8_gpu_space *space, uint32_t start, uint32
 	}
 	candidate = ((uint64_t)start + alignment - 1) & ~(uint64_t)(alignment - 1);
 	while (candidate + size <= end) {
-		uint32_t at;
-		for (at = 0; at < size; at += SMMU_GRANULE) {
-			uint64_t *entry = adreno8_space_entry(space, (uint32_t)candidate + at);
-			if (entry != NULL && *entry != 0) {
+		/* a 2 MiB leaf that has no table is free whole: the search steps over those by the leaf, not by the page, and reads
+		 * a leaf it has to walk straight from the table (K90's 80bbf06) */
+		uint32_t at = 0;
+		while (at < size) {
+			uint64_t va = candidate + at;
+			uint64_t leaf_end = (va | ((1ULL << 21) - 1)) + 1;
+			uint32_t step = (uint32_t)((leaf_end - va < (uint64_t)(size - at)) ?
+			    (leaf_end - va) : (uint64_t)(size - at));
+			struct adreno8_space_table *leaf = adreno8_space_table(space, 2, (uint32_t)(va >> 21));
+			if (leaf == NULL) {
+				at += step;
+				continue;
+			}
+			const uint64_t *pte = (const uint64_t *)leaf->table;
+			uint32_t sub;
+			for (sub = 0; sub < step; sub += SMMU_GRANULE) {
+				if (pte[((va + sub) >> 12) & 0x1ff] != 0) {
+					break;
+				}
+			}
+			at += sub;
+			if (sub < step) {
 				break;
 			}
 		}
@@ -1068,9 +1094,9 @@ adreno8_space_faulted(struct adreno8_gpu_space *space)
 	if (fsr == 0) {
 		return false;
 	}
-	printf("adreno8: %u: %s SMMU fault %#x at %#x:%#x, syndrome %#x\n", adreno8_step, space->name, fsr,
+	printf("adreno8: %u: %s SMMU fault %#x at %#x:%#x, syndrome %#x fsynr1 %#x\n", adreno8_step, space->name, fsr,
 	    adreno8_rd(adreno8_smmu.base + cb + SMMU_CB_FAR_HI), adreno8_rd(adreno8_smmu.base + cb + SMMU_CB_FAR_LO),
-	    adreno8_rd(adreno8_smmu.base + cb + SMMU_CB_FSYNR0));
+	    adreno8_rd(adreno8_smmu.base + cb + SMMU_CB_FSYNR0), adreno8_rd(adreno8_smmu.base + cb + SMMU_CB_FSYNR1));
 	/* Secure diagnostics read registers only. Ownership transfer forbids CPU
 	 * access to data pages; this path also leaves shared table contents untouched. */
 	if (space == &adreno8_secure_space) {
@@ -1085,5 +1111,34 @@ adreno8_space_faulted(struct adreno8_gpu_space *space)
 	    adreno8_rd(adreno8_smmu.base + cb + SMMU_CB_SCTLR),
 	    leaf != NULL ? ((uint64_t *)leaf->table)[address >> 12 & 0x1ff] : 0,
 	    adreno8_rd(adreno8_smmu.base + SMMU_SGFSR));
+	if (space == &adreno8_gpu_space)
+		adreno8_bo_describe_fault(address);
+	return true;
+}
+
+/*
+ * Invalidate Stage-1 TLB for a virtual address range (TLBI VAE1IS).
+ * Avoids global SMMU TLBIALLNSNH flush on external buffer unmap.
+ */
+bool
+adreno8_smmu_tlb_invalidate_range(struct adreno8_gpu_space *space, uint64_t va, uint64_t size)
+{
+	if (!space || !space->is_on || size == 0) return true;
+	uint64_t start = va & ~SMMU_GRANULE_MASK;
+	uint64_t end = (va + size + SMMU_GRANULE - 1) & ~SMMU_GRANULE_MASK;
+	if ((end - start) / SMMU_GRANULE > 64)
+		return adreno8_space_sync(space);
+	uint32_t cb = (adreno8_smmu_pages + space->context) * adreno8_smmu_page;
+	for (uint64_t addr = start; addr < end; addr += SMMU_GRANULE) {
+		uint64_t tlbiva = (((uint64_t)space->context & 0xffULL) << 48) | ((addr >> 12) & 0xfffffffffULL);
+		adreno8_smmu_write64(adreno8_smmu.base + cb + SMMU_CB_TLBIVA, tlbiva);
+	}
+	adreno8_settle();
+	adreno8_put(&adreno8_smmu, "cb tlb sync", cb + SMMU_CB_TLBSYNC, 1);
+	if (!adreno8_wait_for(&adreno8_smmu, cb + SMMU_CB_TLBSTATUS, 1, 0, 100)) {
+		printf("adreno8: %u: context %u TLB range sync timed out\n", adreno8_step, space->context);
+		return false;
+	}
+	adreno8_settle();
 	return true;
 }

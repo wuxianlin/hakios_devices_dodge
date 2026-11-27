@@ -79,7 +79,10 @@ struct adreno8_space_table {
 struct adreno8_gpu_space {
 	const char *name;
 	uint32_t context;
-	struct adreno8_space_table tables[1024];
+	/* 4 GiB at 4 KiB granule needs at most 1 L0 + 4 L1 + 2048 L2 = 2053 tables.  The 1024 there were ran out at
+	 * 0x8f800000: the GPU's range is 3.25 GiB, 1664 leaves, and the reservation that found no table closed every
+	 * submission (K90's kernel-12377-cmd31-warm5). */
+	struct adreno8_space_table tables[2064];
 	unsigned table_count;
 	uint16_t leaf_slot[2048];                 /* each 2 MB's level-2 table, as its index in tables[] + 1; 0: not looked up yet */
 	unsigned secure_tables;           /* pages already assigned to {HLOS read/write, CP_PIXEL read} */
@@ -210,6 +213,8 @@ struct adreno8_gpu_space {
 #define SMMU_CB_FAR_LO          0x60
 #define SMMU_CB_FAR_HI          0x64
 #define SMMU_CB_FSYNR0          0x68
+#define SMMU_CB_FSYNR1          0x6c
+#define SMMU_CB_TLBIVA          0x600
 #define SMMU_CB_TLBASID         0x610
 #define SMMU_CB_TLBSYNC         0x7f0
 #define SMMU_CB_TLBSTATUS       0x7f4           /* bit 0: a sync is still on its way */

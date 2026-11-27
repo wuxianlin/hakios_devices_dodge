@@ -104,6 +104,57 @@ adreno8_zap_parse(const uint8_t *data, size_t size, struct adreno8_zap_image *im
 static vm_offset_t zap_metadata;
 static bool zap_attempted, zap_authenticated;
 
+/*
+ * Into the zap region and its metadata page, as they are mapped here (ml_io_map_wcomb(): write-combining, and on the
+ * OnePlus 13 device memory, 2026-11-25): a word at a time, every store aligned to its own size -- the kernel's memcpy
+ * and memset store where they like, and an unaligned wide store into that memory is an "Unaligned kernel data abort"
+ * (G12-08: step 18, in memcpy, from this file's segment loop).  Each word is gathered from ordinary memory first.
+ */
+static void
+zap_write(vm_offset_t to, const uint8_t *from, size_t size)
+{
+	for (; size >= 8 && (to & 7) == 0; size -= 8, to += 8, from += 8) {
+		uint64_t word;
+
+		memcpy(&word, from, sizeof(word));
+		*(volatile uint64_t *)to = word;
+	}
+	for (; size >= 4 && (to & 3) == 0; size -= 4, to += 4, from += 4) {
+		uint32_t word;
+
+		memcpy(&word, from, sizeof(word));
+		*(volatile uint32_t *)to = word;
+	}
+	for (; size >= 2 && (to & 1) == 0; size -= 2, to += 2, from += 2) {
+		uint16_t word;
+
+		memcpy(&word, from, sizeof(word));
+		*(volatile uint16_t *)to = word;
+	}
+	while (size-- != 0) {
+		*(volatile uint8_t *)to++ = *from++;
+	}
+}
+
+/* ... and zeros likewise */
+static void
+zap_zero(vm_offset_t to, size_t size)
+{
+	static const uint64_t zeros[2] = { 0, 0 };
+
+	while (size > sizeof(zeros)) {
+		size_t n = size >> 1;
+
+		if (n > sizeof(zeros)) {
+			n = sizeof(zeros);
+		}
+		zap_write(to, (const uint8_t *)zeros, n);
+		to += n;
+		size -= n;
+	}
+	zap_write(to, (const uint8_t *)zeros, size);
+}
+
 bool
 adreno8_zap_ready(void)
 {
@@ -159,8 +210,8 @@ adreno8_zap_authenticate(void)
 	if (metadata_view == 0 || target == 0) {
 		return false;
 	}
-	memcpy((void *)metadata_view, data, image.header_size);
-	memcpy((void *)(metadata_view + image.header_size), data + image.hash_offset, image.hash_size);
+	zap_write(metadata_view, data, image.header_size);
+	zap_write(metadata_view + image.header_size, data + image.hash_offset, image.hash_size);
 	adreno8_settle();
 	printf("adreno8: zap: metadata %#x bytes, %u segments, reserved %#llx + %#x\n",
 	    image.header_size + image.hash_size, image.count, ADRENO8_ZAP_BASE, image.memory_size);
@@ -171,8 +222,8 @@ adreno8_zap_authenticate(void)
 	for (unsigned i = 0; i < image.count; i++) {
 		const struct adreno8_zap_segment *segment = &image.segments[i];
 		vm_offset_t at = target + segment->address - image.minimum;
-		memcpy((void *)at, data + segment->file_offset, segment->file_size);
-		memset((void *)(at + segment->file_size), 0, segment->memory_size - segment->file_size);
+		zap_write(at, data + segment->file_offset, segment->file_size);
+		zap_zero(at + segment->file_size, segment->memory_size - segment->file_size);
 	}
 	adreno8_settle();
 	if (!zap_pas(0x42000205, 1, 0, 0)) {

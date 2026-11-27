@@ -13,6 +13,7 @@
 #include "hakios.adreno8_hwsched_private.h"
 #include "hakios.adreno8_gpu_private.h"
 #include "hakios.adreno8_context_private.h"
+#include "hakios.adreno8_bo_private.h"
 
 extern void loader_log_line(const char *line);
 extern struct adreno8_block adreno8_smmu;
@@ -358,6 +359,12 @@ gpu_register_config(void)
 	gpu_write(GEN8_UCHE_TRAP_BASE_HI, 0x1ffff);
 	gpu_write(GEN8_UCHE_WRITE_THRU_BASE_LO, 0xfffff000);
 	gpu_write(GEN8_UCHE_WRITE_THRU_BASE_HI, 0x1ffff);
+	/* The colour cache has a trap and write-through base of its own; Linux a8xx_gpu.c hw_init
+	 * writes all four bases with the same value. */
+	gpu_write(GEN8_UCHE_CCHE_TRAP_BASE_LO, 0xfffff000);
+	gpu_write(GEN8_UCHE_CCHE_TRAP_BASE_HI, 0x1ffff);
+	gpu_write(GEN8_UCHE_CCHE_WRITE_THRU_BASE_LO, 0xfffff000);
+	gpu_write(GEN8_UCHE_CCHE_WRITE_THRU_BASE_HI, 0x1ffff);
 	gpu_gmu_write(GMU(GEN8_GMUCX_POWER_COUNTER_SELECT_XOCLK_1), 4);
 	/* sun-gpu.dtsi: UBWC 5, min-access-length 32; gen8_0_0 highest_bank_bit 16. */
 	if (!gpu_pipe_write(2, GEN8_GRAS_NC_MODE_CNTL, 0x60) ||
@@ -486,6 +493,124 @@ gpu_direct_ring_timeout_dump(void)
 		}
 	}
 	(void)gpu_aperture(0);
+}
+
+/* After HFI 150 the GMU leaves GX up for the host's snapshot, as KGSL takes one before its
+ * recovery. Per pipe, each IB level with a base is printed with the words before and after the
+ * CP's position, base + 4 * (INIT_SIZE - REM_SIZE), so the packet it stopped in can be decoded
+ * against the submission. BR's IB1 is also printed whole, with the buffers it names
+ * (adreno8_bo_dump_tree), so the hung draw's register state can be rebuilt. */
+void
+adreno8_gpu_hang_dump(void)
+{
+	static const uint32_t global[] = { GEN8_RBBM_STATUS, GEN8_RBBM_STATUS1, GEN8_RBBM_GFX_STATUS,
+		GEN8_RBBM_GFX_BR_STATUS, GEN8_RBBM_GFX_BV_STATUS, GEN8_RBBM_MISC_STATUS, GEN8_CP_CP2GMU_STATUS,
+		GEN8_CP_RL_ERROR_DETAILS_0, GEN8_CP_RL_ERROR_DETAILS_1, GEN8_CP_INTERRUPT_STATUS_GLOBAL,
+		GEN8_UCHE_CLIENT_PF, GEN8_UCHE_CCHE_GC_GMEM_RANGE_MIN_LO, GEN8_SP_HLSQ_GC_GMEM_RANGE_MIN_LO,
+		GEN8_UCHE_CCHE_TRAP_BASE_LO, GEN8_UCHE_CCHE_TRAP_BASE_HI, GEN8_UCHE_CCHE_WRITE_THRU_BASE_LO,
+		GEN8_UCHE_CCHE_WRITE_THRU_BASE_HI };
+	static const uint32_t piped[] = { GEN8_CP_PIPE_STATUS_PIPE, GEN8_CP_SQE_STATUS_PIPE,
+		GEN8_CP_HW_FAULT_STATUS_PIPE, GEN8_CP_INTERRUPT_STATUS_PIPE, GEN8_CP_PROTECT_STATUS_PIPE };
+	static const uint32_t pipes[] = { A8_PIPE_BR, A8_PIPE_BV, A8_PIPE_DDE_BR, A8_PIPE_DDE_BV };
+	static const struct { const char *name; uint32_t base; } levels[] = {
+		{ "IB1", GEN8_CP_IB1_BASE_PIPE }, { "IB2", GEN8_CP_IB2_BASE_PIPE }, { "IB3", GEN8_CP_IB3_BASE_PIPE },
+		{ "SDS", GEN8_CP_SDS_BASE_PIPE }, { "MRB", GEN8_CP_MRB_BASE_PIPE } };
+	static const char *const uche_clients[] = { "BR_VFD", "BR_SP", "BR_VSC", "BR_VPC", "BR_HLSQ",
+		"BR_PC", "BR_LRZ", "BR_TP", "BV_VFD", "BV_SP", "BV_VSC", "BV_VPC", "BV_HLSQ",
+		"BV_PC", "BV_LRZ", "BV_TP", "STCHE" };
+	static bool dumped;
+
+	/* Both the HFI 150 handler and the timeout report ask; the first one reads. */
+	if (dumped)
+		return;
+	dumped = true;
+
+	if (gpu_state == GPU_FAILED || !GMU_PWR_GX_UP(gpu_gmu_read(GMU_PWR_CLK_STATUS))) {
+		printf("adreno8: hang dump: GX is off, no CP registers\n");
+		return;
+	}
+	/* Dump BR's command tree first so the compact register/pipe summary sits at the ring tail. */
+	uint64_t br_ib1_base = 0;
+	uint32_t br_ib1_init = 0;
+	if (gpu_aperture(A8_PIPE_BR)) {
+		br_ib1_base = gpu_read(GEN8_CP_IB1_BASE_PIPE) |
+		    ((uint64_t)gpu_read(GEN8_CP_IB1_BASE_PIPE + 1) << 32);
+		uint32_t br_ib1_rem = gpu_read(GEN8_CP_IB1_BASE_PIPE + 2);
+		br_ib1_init = gpu_read(GEN8_CP_IB1_BASE_PIPE + 3);
+		(void)gpu_aperture(0);
+		if (br_ib1_base != 0 && br_ib1_rem <= br_ib1_init)
+			adreno8_bo_dump_tree(br_ib1_base, br_ib1_init);
+		else
+			br_ib1_base = 0;
+	}
+	(void)gpu_aperture(0);
+	for (unsigned i = 0; i < A8_COUNT(global); i++)
+		printf("adreno8: hang reg %#x = %#x\n", global[i], gpu_read(global[i]));
+	uint32_t uche_pf = gpu_read(GEN8_UCHE_CLIENT_PF);
+	uint32_t cid = uche_pf & 0x7fu;
+	printf("adreno8: hang UCHE_CLIENT_PF = %#x (client %u: %s)\n", uche_pf, cid,
+	    cid < A8_COUNT(uche_clients) ? uche_clients[cid] : "unknown");
+	for (unsigned p = 0; p < A8_COUNT(pipes); p++) {
+		uint32_t pipe = pipes[p];
+
+		if (!gpu_aperture(pipe))
+			break;
+		for (unsigned i = 0; i < A8_COUNT(piped); i++)
+			printf("adreno8: hang pipe %u reg %#x = %#x\n", pipe, piped[i], gpu_read(piped[i]));
+		for (uint32_t index = 0; index < 33; index++) {
+			gpu_write(GEN8_CP_SQE_STAT_ADDR_PIPE, index);
+			printf("adreno8: hang pipe %u SQE_STAT[%u] = %#x\n", pipe, index, gpu_read(GEN8_CP_SQE_STAT_DATA_PIPE));
+		}
+		for (unsigned i = 0; i < A8_COUNT(levels); i++) {
+			uint64_t base = gpu_read(levels[i].base) | (uint64_t)gpu_read(levels[i].base + 1) << 32;
+			uint32_t rem = gpu_read(levels[i].base + 2), init = gpu_read(levels[i].base + 3);
+			char what[32];
+
+			printf("adreno8: hang pipe %u %s base %#llx rem %u init %u\n", pipe, levels[i].name, base, rem, init);
+			if (base == 0 || rem > init)
+				continue;
+			if (i <= 1 && base < (1ull << 32))
+				adreno8_bo_describe_owner(levels[i].name, (uint32_t)base);
+			uint32_t done = init - rem, before = done < 48 ? done : 48, after = rem < 16 ? rem : 16;
+			uint64_t at = base + 4ull * done;
+
+			snprintf(what, sizeof(what), "pipe %u %s at -%u", pipe, levels[i].name, before);
+			adreno8_bo_dump_words(what, at - 4ull * before, before + after);
+		}
+	}
+	(void)gpu_aperture(0);
+	/* The program BR's registers name now: its instructions say which memory the shader reads
+	 * itself (private memory, buffers), which the command tree does not. */
+	if (gpu_aperture(A8_PIPE_BR)) {
+		static const struct { const char *name; uint32_t base, length, private_base; } stages[] = {
+			{ "vs", 0xa81c, 0xa824, 0xa81f }, { "fs", 0xa983, 0xab05, 0xa986 } };
+		for (unsigned i = 0; i < A8_COUNT(stages); i++) {
+			uint64_t base = gpu_read(stages[i].base) | (uint64_t)gpu_read(stages[i].base + 1) << 32;
+			uint32_t length = gpu_read(stages[i].length);
+			char what[32];
+
+			printf("adreno8: hang shader %s base %#llx instrlen %u private %#x:%#x param %#x size %#x\n",
+			    stages[i].name, base, length, gpu_read(stages[i].private_base + 1),
+			    gpu_read(stages[i].private_base), gpu_read(stages[i].private_base - 1),
+			    gpu_read(stages[i].private_base + 2));
+			if (base == 0 || length == 0 || length > 64)
+				continue;
+			snprintf(what, sizeof(what), "shader %s", stages[i].name);
+			adreno8_bo_dump_words(what, base, length * 32u);
+		}
+		(void)gpu_aperture(0);
+	}
+	/* The tree is larger than the log ring keeps once the programs start reporting their
+	 * timeouts, and its root is the first to go: say the root and the fault once more, last. */
+	if (br_ib1_base != 0) {
+		char what[32];
+
+		snprintf(what, sizeof(what), "tree 0 of %u", br_ib1_init);
+		adreno8_bo_dump_words(what, br_ib1_base, br_ib1_init < 2048u ? br_ib1_init : 2048u);
+	}
+	if (adreno8_gpu_space.is_on)
+		(void)adreno8_space_faulted(&adreno8_gpu_space);
+	adreno8_context_describe_inflight();
 }
 
 /* Linux a8xx_hw_init/a8xx_cp_init at efbda69d92e6 use a zeroed powerup page,

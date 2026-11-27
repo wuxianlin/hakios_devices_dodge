@@ -8,6 +8,9 @@
 #include "hakios.adreno8_hwsched_private.h"
 #include "hakios.adreno8_gpu_private.h"
 #include "hakios.adreno8_context_private.h"
+#ifdef KERNEL
+#include <sys/proc.h>
+#endif
 
 #define printf adreno8_say
 #define CONTEXT_ID 1u
@@ -19,7 +22,14 @@
 /* NO_GMEM_ALLOC, PREAMBLE, PER_CONTEXT_TS, NOTIFY, priority 1 (RB0), GL. */
 #define CONTEXT_FLAGS 0x00101072u
 #define CONTEXT_NOTIFY (1u << 5)
-#define CONTEXT_WAIT_NS 200000000ULL
+/* Every wait for a timestamp, including an external buffer's unmap. The GMU's own hang report
+ * (HFI 150, with the timestamps and a CP dump) has arrived on device both before and after two
+ * seconds; a wait that gives up sooner closes submissions with neither. */
+#define CONTEXT_WAIT_NS 2000000000ULL
+/* A submission may run for seconds (the camera's still-image passes at the lowest GPU speed), so
+ * a wait for a timestamp fails only after the end-of-pipe timestamp has stood still this long.
+ * A real hang is reported by the GMU (HFI 150) and ends the wait through the completion poll. */
+#define CONTEXT_STALL_NS 30000000000ULL
 #define CONTEXT_INFLIGHT_MAX 8u
 #define CONTEXT_CONSUME_NS 20000000ULL
 
@@ -29,6 +39,14 @@ static struct adreno8_memory *context_queue, *context_timestamps, *test_ib, *tes
 static vm_offset_t context_queue_view, context_timestamp_view;
 static uint32_t context_last, context_sequence;
 static bool context_tested;
+
+#define SUBMIT_HISTORY 16u
+struct submit_record {
+	uint32_t timestamp, count, ib0_addr, ib0_words, ib_last_addr;
+	int pid;
+};
+static struct submit_record submit_history[SUBMIT_HISTORY];
+static uint32_t submit_history_next;
 
 static bool
 context_fail(const char *what)
@@ -124,14 +142,32 @@ context_queue_indices(uint32_t *read, uint32_t *write)
 	return true;
 }
 
+/*
+ * Every wait asks here every 100 us, and so does every program that polls a fence. The health
+ * checks behind an answer read the SMMU fault registers of three contexts, the GMU's interrupt
+ * state, the HFI queues and the context queue; on kernel-12377-cmd24-hash1 they were most of
+ * SpringBoard's processor time while it swiped pages (adreno8_space_faulted, adreno8_hfi_pump,
+ * adreno8_rd). They run at most once per CONTEXT_CHECK_NS, as adreno8_bo_ready's do, so a fault
+ * is still noticed by the next check at most that much later; the timestamp is read every time.
+ */
+#define CONTEXT_CHECK_NS 1000000ull              /* 1 ms */
+static uint64_t context_checked;
+
 bool
 adreno8_context_done(uint32_t timestamp)
 {
+	uint64_t now = mach_absolute_time(), since;
 	uint32_t read, write;
+
 	if (!timestamp || !context_last || (int32_t)(context_last - timestamp) < 0 ||
-	    !context_health()) return false;
-	if (!adreno8_hfi_poll()) return context_fail("completion transport");
-	if (!context_queue_indices(&read, &write)) return false;
+	    context_state == CONTEXT_FAILED) return false;
+	absolutetime_to_nanoseconds(now - context_checked, &since);
+	if (context_checked == 0 || since >= CONTEXT_CHECK_NS) {
+		if (!context_health()) return false;
+		if (!adreno8_hfi_poll()) return context_fail("completion transport");
+		if (!context_queue_indices(&read, &write)) return false;
+		context_checked = now;
+	}
 	adreno8_settle();
 	uint32_t eop = adreno8_rd(context_timestamp_view + CONTEXT_EOP);
 	if ((int32_t)(context_last - eop) < 0) return context_fail("EOP exceeds submitted timestamp");
@@ -142,10 +178,21 @@ static bool
 context_wait(uint32_t timestamp)
 {
 	uint64_t start = mach_absolute_time(), elapsed;
+	uint32_t seen = adreno8_rd(context_timestamp_view + CONTEXT_EOP);
 	while (!adreno8_context_done(timestamp)) {
 		if (context_state == CONTEXT_FAILED) return false;
+		uint32_t eop = adreno8_rd(context_timestamp_view + CONTEXT_EOP);
+		if (eop != seen) {
+			seen = eop;
+			start = mach_absolute_time();
+		}
 		absolutetime_to_nanoseconds(mach_absolute_time() - start, &elapsed);
-		if (elapsed >= CONTEXT_WAIT_NS) return context_fail("EOP timeout");
+		if (elapsed >= CONTEXT_STALL_NS) {
+			printf("adreno8: EOP timeout waiting for %u: last %u, EOP %u\n", timestamp, context_last,
+			    adreno8_rd(context_timestamp_view + CONTEXT_EOP));
+			adreno8_gpu_hang_dump();
+			return context_fail("EOP timeout");
+		}
 		adreno8_sleep_us(100);
 	}
 	return true;
@@ -178,6 +225,14 @@ adreno8_context_depth(void)
 	return adreno8_inflight >= 1 && adreno8_inflight <= CONTEXT_INFLIGHT_MAX ? adreno8_inflight : 1;
 }
 
+/* Whether the context is one to submit to. Asked by nothing in this tree yet: the newer kernel's GPU service asks it of
+ * its own wait for room (adreno8_service.c there), whose patience is longer than the context's. */
+bool
+adreno8_context_live(void)
+{
+	return context_state == CONTEXT_REGISTERED && context_health();
+}
+
 /* Waits until the GMU has read enough of the queue for `words` more; returns the write index. */
 static bool
 context_room(uint32_t words, uint32_t *write)
@@ -206,6 +261,21 @@ adreno8_context_wait_idle(const char *what)
 	if ((context_last && !context_wait(context_last)) || !adreno8_gpu_wait_idle(what))
 		return context_fail("external buffer idle");
 	return true;
+}
+
+/*
+ * For a change that needs the pipeline empty and can be put off (the GPU's speed): waits at most
+ * limit_us for what is outstanding, and false without closing anything when it is still running.
+ */
+bool
+adreno8_context_drained(const char *what, uint32_t limit_us)
+{
+	if (!context_tested || !context_health()) return false;
+	for (uint32_t waited = 0; context_last && !adreno8_context_done(context_last); waited += 100) {
+		if (context_state == CONTEXT_FAILED || waited >= limit_us) return false;
+		adreno8_sleep_us(100);
+	}
+	return adreno8_gpu_wait_idle(what) || context_fail("external buffer idle");
 }
 
 uint32_t
@@ -258,6 +328,14 @@ adreno8_context_submit(const uint64_t *addresses, const uint32_t *words, uint32_
 	adreno8_settle();
 	/* No sync objects or preemption: normal RB0 dispatch uses interrupt bit 2. */
 	context_last = timestamp;
+	submit_history[submit_history_next++ % SUBMIT_HISTORY] = (struct submit_record){
+		.timestamp = timestamp,
+		.count = count,
+		.ib0_addr = (uint32_t)addresses[0],
+		.ib0_words = words[0],
+		.ib_last_addr = (uint32_t)addresses[count - 1],
+		.pid = proc_selfpid(),
+	};
 	adreno8_wr(adreno8_gmu.base + GMU_HOST2GMU_SET, 1u << 2);
 	return timestamp;
 }
@@ -266,6 +344,52 @@ uint32_t
 adreno8_context_last(void)
 {
 	return context_last;
+}
+
+/* The timestamp the GPU last wrote at end of pipe: the submission after it is the one that did not
+ * retire. Zero before the context exists. */
+uint32_t
+adreno8_context_retired(void)
+{
+	return context_timestamp_view ? adreno8_rd(context_timestamp_view + CONTEXT_EOP) : 0;
+}
+
+/*
+ * For the log only -- in the newer kernel the GPU service's adreno8_service_say asks it; nothing in this tree does yet:
+ * what was given last, what the core retired last, and how far the GMU has read the context queue -- read straight from
+ * the two pages: nothing is failed and nothing is polled.  The
+ * OnePlus 13, 2026-11-26: a submission the core never finishes, with no fault and no timeout of the context's own, showed
+ * itself only as the service's "no answer" (IOS26-M01, M02); these four say where it stood.
+ */
+void
+adreno8_context_status(uint32_t *last, uint32_t *eop, uint32_t *read, uint32_t *write)
+{
+	*last = context_last;
+	*eop = context_timestamp_view != 0 ? adreno8_rd(context_timestamp_view + CONTEXT_EOP) : 0;
+	*read = context_queue_view != 0 ? adreno8_rd(context_queue_view + 20) : 0;
+	*write = context_queue_view != 0 ? adreno8_rd(context_queue_view + 24) : 0;
+}
+
+void
+adreno8_context_describe_inflight(void)
+{
+	static bool described;
+	uint32_t sop, eop;
+
+	if (described)
+		return;
+	described = true;
+	sop = context_timestamp_view ? adreno8_rd(context_timestamp_view + CONTEXT_SOP) : 0;
+	eop = context_timestamp_view ? adreno8_rd(context_timestamp_view + CONTEXT_EOP) : 0;
+	printf("adreno8: context inflight: SOP %u EOP %u last %u\n", sop, eop, context_last);
+	for (uint32_t i = 1; i <= SUBMIT_HISTORY; i++) {
+		const struct submit_record *s = &submit_history[(submit_history_next - i) % SUBMIT_HISTORY];
+
+		if (s->timestamp == 0)
+			continue;
+		printf("adreno8: submit ts %u pid %d count %u ib0 %#x+%#x ib_last %#x\n",
+		    s->timestamp, s->pid, s->count, s->ib0_addr, s->ib0_words, s->ib_last_addr);
+	}
 }
 
 bool

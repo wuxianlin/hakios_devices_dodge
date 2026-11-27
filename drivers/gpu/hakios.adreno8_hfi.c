@@ -3,6 +3,7 @@
 #include "hakios.adreno8_hwsched_private.h"
 #include "hakios.adreno8_memory_private.h"
 #include "hakios.adreno8_clock_private.h"
+#include "hakios.adreno8_context_private.h"
 #include <sys/hakios.input.h>
 
 #define printf adreno8_say
@@ -142,6 +143,7 @@ adreno8_hfi_health(void)
 static uint64_t retired_ticks;
 uint64_t adreno8_retired_total;                 /* never reset: adreno8_speed_tick()'s measure of load */
 static uint32_t retired_count, retired_by[7];
+#define LONG_SUBMISSION_US      250000
 
 static void
 adreno8_retire_note(const uint32_t *msg)
@@ -151,6 +153,9 @@ adreno8_retire_note(const uint32_t *msg)
 	uint64_t ticks = eop > sop ? eop - sop : 0;
 	unsigned bucket = 0;
 
+	if (ticks * 10 / 192 >= LONG_SUBMISSION_US) {
+		printf("adreno8: submission %u ran %llu ms on the GPU\n", msg[2], ticks * 10 / 192 / 1000);
+	}
 	while (bucket < 6 && ticks * 10 / 192 >= limits_us[bucket]) bucket++;
 	retired_by[bucket]++;
 	retired_count++;
@@ -221,6 +226,20 @@ adreno8_hfi_pump(uint32_t request, bool *ack, unsigned *notices)
 			} else if (type == 0 && (received_id == 100 || received_id == 150)) {
 				printf("adreno8: %u: HFI fatal message %u data %#x (%d words)\n",
 				    adreno8_step, received_id, words >= 2 ? resp[1] : 0, words);
+				/* The whole message, eight words a line: for 150 (context bad) KGSL's
+				 * layout puts the context, timestamp and error code after the header,
+				 * and the error's own key/value payload after those. */
+				for (int at = 0; at < words; at += 8) {
+					char line[8 * 9 + 1];
+					unsigned used = 0;
+					for (int i = at; i < words && i < at + 8; i++)
+						used += (unsigned)snprintf(line + used, sizeof(line) - used, " %08x", resp[i]);
+					printf("adreno8: %u: HFI %u word %d:%s\n", adreno8_step, received_id, at, line);
+				}
+				/* The GMU reports the hang here, often before any wait times out and while
+				 * GX is still up, so the CP state is read now. */
+				if (received_id == 150)
+					adreno8_gpu_hang_dump();
 				return false;
 			} else if (type == 0 && received_id == 133) {
 				/* EOP memory remains the completion check; this packet is a notification. */
@@ -583,6 +602,9 @@ adreno8_step_gx_power(void)
 #define SPEED_TOUCH_NS          300000000ull
 #define SPEED_HOT_TENTHS        700
 #define SPEED_COOL_TENTHS       600
+/* HFI changes the GX clock, voltage and DDR bandwidth with no batch in flight: what is outstanding is given this long
+ * to retire before a change (K90's db01009) */
+#define SPEED_DRAIN_US          20000
 
 static uint32_t adreno8_speed_now = 1, adreno8_speed_changes;
 static uint64_t adreno8_speed_ticked, adreno8_speed_busy_seen, adreno8_speed_light_since;
@@ -645,6 +667,10 @@ adreno8_speed_tick(void)
 		adreno8_speed_light_since = 0;
 	}
 	if (want == adreno8_speed_now) {
+		return;
+	}
+	/* A batch that runs longer than the limit keeps the speed as it is; the next tick asks again. */
+	if (!adreno8_context_drained("GPU speed", SPEED_DRAIN_US)) {
 		return;
 	}
 	msg[0] = 1;

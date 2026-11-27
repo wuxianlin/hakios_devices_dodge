@@ -150,6 +150,14 @@ redwood_gpu_last(void)
 	return redwood_platform_is_gpu8() ? adreno8_context_last() : legacy_gpu_last();
 }
 
+/* The timestamp the core retired last (adreno8_context_retired): what tells a long submission
+ * from a core that has stopped -- gpuWait(), in the service (K90's db01009) */
+uint32_t
+redwood_gpu_retired(void)
+{
+	return redwood_platform_is_gpu8() ? adreno8_context_retired() : 0;
+}
+
 void
 redwood_gpu_speed(uint32_t *mhz, uint32_t *changes)
 {

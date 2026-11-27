@@ -17,8 +17,22 @@ HakiosGPUUserClient::freeBuffer(struct gpu_buffer * b)
 {
 	bool busy = gGPUReported || !redwood_gpu_ready() || (b->fence != 0 && !redwood_gpu_done(b->fence));
 
+	/*
+	 * Nowhere to keep it: wait until the buffer's submission retires. One may run for seconds, so a
+	 * wait that runs out here is tried again; gpuWait() reports a core whose retired timestamp stood
+	 * still for GPU_STALL_MS and closes submissions, which ends this loop. The wait lets go of the
+	 * lock, so a reap() meanwhile may make room. (K90's 63fd883: one second, then the GPU was given
+	 * up for every program -- the whole screen flickered.)
+	 */
 	if (busy && fLeftCount == GPU_LEFT && !gGPUReported && redwood_gpu_ready()) {
-		busy = !gpuWait(b->fence, 1000);        /* (nowhere to keep it: this one is waited for) */
+		uint64_t began = mach_absolute_time(), ns;
+
+		do {
+			busy = !gpuWait(b->fence, GPU_PATIENCE_MS);
+		} while (busy && fLeftCount == GPU_LEFT && !gGPUReported && redwood_gpu_ready());
+		absolutetime_to_nanoseconds(mach_absolute_time() - began, &ns);
+		IOLog("HakiosGPU: %u buffers given back wait for the GPU; one more waited %llu ms for submission %u: %s\n",
+		    GPU_LEFT, ns / NSEC_PER_MSEC, b->fence, busy ? "not done" : "done");
 	}
 	if (busy && fLeftCount < GPU_LEFT) {
 		struct gpu_left * left = &fLeft[fLeftCount++];
@@ -278,7 +292,11 @@ HakiosGPUUserClient::gemNew(struct msm_gem_new * request)
 			return kIOReturnNotReady;
 		}
 
-		if (k->memory != NULL && k->size == size && k->flags == request->flags && (found == NULL || k->since > found->since)) {
+		/* one kept of this kind and of this size or up to a quarter larger: the smallest, and of those the one
+		 * kept last (K90's a2c785c: CoreAnimation's blur targets change size from frame to frame of an
+		 * animation, and with exact sizes only the kept ones were given again in hardly any window) */
+		if (k->memory != NULL && k->size >= size && k->size - size <= size / 4 && k->flags == request->flags &&
+		    (found == NULL || k->size < found->size || (k->size == found->size && k->since > found->since))) {
 			found = k;
 		}
 	}
@@ -295,10 +313,10 @@ HakiosGPUUserClient::gemNew(struct msm_gem_new * request)
 			b->flags = found->flags;
 			fNextBuffer = h + 1;
 			fBufferCount++;
-			fBufferBytes += size;
+			fBufferBytes += found->size;       /* (its own size, which may be the larger one kept) */
 			request->handle = h + 1;
 			found->memory = NULL;
-			fKeptBytes -= size;
+			fKeptBytes -= found->size;
 			gGPUStat.given_again++;
 			IOLockUnlock(gGPULock);
 			if (gGPUKeep == 2) {
