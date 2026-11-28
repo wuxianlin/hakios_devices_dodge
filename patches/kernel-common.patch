@@ -14152,7 +14152,7 @@ index 0000000..1a4ab90
 + }
 +}
 diff --git a/userland/src/eagl.c b/userland/src/eagl.c
-index 3c359ee..595fcbd 100644
+index 3c359ee..d183bf5 100644
 --- a/userland/src/eagl.c
 +++ b/userland/src/eagl.c
 @@ -242,15 +242,24 @@ struct image {
@@ -14245,7 +14245,41 @@ index 3c359ee..595fcbd 100644
  	}
  	if (e->frames == 30 || e->frames % 200 == 0) {
  		summary(e);
-@@ -2980,7 +3019,7 @@ group_draw_end(struct eagl *e, const GLint enabled[4])
+@@ -1847,6 +1886,13 @@ static const char table_fragment[] =
+  *   the matrix over what is there, tex_color_matrix_4x4_bias, and tex_mix by the layer's alpha);
+  *   the matrix arithmetic is also in the OpenGL ES renderer's own shaders, colorMatrix4x4Bias.
+  *   What is there is read with EXT_shader_framebuffer_fetch.
++ *   The matrix's result is laid over what is behind it, by the alpha the matrix gives it, and
++ *   that by the layer's alpha: the blend CoreAnimation has on for the draw (one, and one less the
++ *   source's alpha), done here because the blending is off for it. Without the laying over, a
++ *   result the matrix gave an alpha under one came out too dark: the App Library's category boxes,
++ *   whose alpha the matrix makes 0.83 less a weighted sum of what is behind, were a flat dark
++ *   grey -- 109,114,107 in one of them, 121,111,99 in another -- where the laying over gives
++ *   175,186,167 and 199,173,142: the light tint, with the hue of the wallpaper behind.
+  *
+  *   "c4p" (20), the filter colorMatrix told that its input is premultiplied
+  *   (inputPremultipliedValues): the matrix over the layer's pixels as they are. The clock's
+@@ -1875,7 +1921,8 @@ static const char vibrant_fragment[] =
+     "  s = s.r * colours[0] + s.g * colours[1] + s.b * colours[2] + s.a * colours[3] + colours[4];\n"
+     "  s.a = clamp(s.a, 0., 1.);\n"
+     "  s.rgb = clamp(s.rgb * s.a, 0., 1.);\n"
+-    "  result = mix(behind, s, layer.a);\n"
++    "  mediump vec4 over = vec4(s.rgb + behind.rgb * (1. - s.a), s.a + behind.a * (1. - s.a));\n"
++    "  result = mix(behind, over, layer.a);\n"
+     "}\n";
+ static const char masking_fragment[] =
+     "#version 300 es\n"
+@@ -2682,7 +2729,8 @@ static const char group_over_fragment[] =
+     "  s = s.r * colours[0] + s.g * colours[1] + s.b * colours[2] + s.a * colours[3] + colours[4];\n"
+     "  s.a = clamp(s.a, 0., 1.);\n"
+     "  s.rgb = clamp(s.rgb * s.a, 0., 1.);\n"
+-    "  result = mix(behind, s, layer.a);\n"
++    "  mediump vec4 over = vec4(s.rgb + behind.rgb * (1. - s.a), s.a + behind.a * (1. - s.a));\n"
++    "  result = mix(behind, over, layer.a);\n"
+     "}\n";
+ static const char group_flat_fragment[] =
+     "#version 300 es\n"
+@@ -2980,7 +3028,7 @@ group_draw_end(struct eagl *e, const GLint enabled[4])
  }
  
  static bool
@@ -14254,7 +14288,7 @@ index 3c359ee..595fcbd 100644
  {
  	static const GLfloat identity[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
  	static uint8_t said[90];
-@@ -3020,7 +3059,12 @@ plain_draw_begin(struct eagl *e, GLint enabled[4])
+@@ -3020,7 +3068,12 @@ plain_draw_begin(struct eagl *e, GLint enabled[4])
  	 * its own memory -- nothing -- and wrote that over everything: every launch image SpringBoard
  	 * keeps came out black, and with it the zoom that opens an application the first time.
  	 */
@@ -14268,7 +14302,7 @@ index 3c359ee..595fcbd 100644
  	    (e->colour != 0 && e->colour == e->bound[0])) {
  		census_draw(e, function, CENSUS_NOT_DRAWN);
  		return false;
-@@ -3272,7 +3316,7 @@ my_glDrawArrays(void *context, GLenum mode, GLint first, GLsizei count)
+@@ -3272,7 +3325,7 @@ my_glDrawArrays(void *context, GLenum mode, GLint first, GLsizei count)
  		glDrawArrays(mode, first, count);
  		group_draw_end(e, enabled);
  	} else {
@@ -14277,7 +14311,7 @@ index 3c359ee..595fcbd 100644
  		glDrawArrays(mode, first, count);
  		if (plain) {
  			plain_draw_end(e, enabled);
-@@ -3312,7 +3356,7 @@ my_glDrawElements(void *context, GLenum mode, GLsizei count, GLenum type, const
+@@ -3312,7 +3365,7 @@ my_glDrawElements(void *context, GLenum mode, GLsizei count, GLenum type, const
  		glDrawElements(mode, count, type, indices);
  		group_draw_end(e, enabled);
  	} else {
