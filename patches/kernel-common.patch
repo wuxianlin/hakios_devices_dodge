@@ -24,7 +24,7 @@ index 799d52b..6971163 100644
  *.orig
  *.rej
 diff --git a/configs/boot-args.lst b/configs/boot-args.lst
-index cb2079e..1fd6ea1 100644
+index cb2079e..05188c0 100644
 --- a/configs/boot-args.lst
 +++ b/configs/boot-args.lst
 @@ -1,4 +1,22 @@
@@ -152,12 +152,13 @@ index cb2079e..1fd6ea1 100644
  glblit	u
  glcensus	u
  glcompile	u
-@@ -147,11 +211,16 @@ gpu_cached	k
+@@ -147,11 +211,17 @@ gpu_cached	k
  gpu_exact	k
  gpu_keep	k
  gpu_log	k
 +gpu_recover	k
 +gpu_va	k
++hakios_data	kl
  hakios_kver	k
  haptic	k
 -haptic_effect	k
@@ -170,7 +171,7 @@ index cb2079e..1fd6ea1 100644
  m2v_utrace	u
  machine_name	k
  membench	k
-@@ -169,12 +238,7 @@ metal_skip	u
+@@ -169,12 +239,7 @@ metal_skip	u
  metal_trace	u
  metal_watch	u
  mic	k
@@ -183,7 +184,7 @@ index cb2079e..1fd6ea1 100644
  modem	k
  modem_again	k
  modem_apn	k
-@@ -219,6 +283,8 @@ modem_wait	k
+@@ -219,6 +284,8 @@ modem_wait	k
  modem_wda_off	k
  net_names	k
  net_trace	k
@@ -192,7 +193,7 @@ index cb2079e..1fd6ea1 100644
  pmic	k
  pmic_list	k
  press_power	k
-@@ -239,6 +305,11 @@ return_panic	k
+@@ -239,6 +306,11 @@ return_panic	k
  root_apfs	u
  sb_delay	u
  serial	l
@@ -204,7 +205,7 @@ index cb2079e..1fd6ea1 100644
  small_cores	k
  small_cores_after	k
  soc_cmd_db	k
-@@ -254,18 +325,30 @@ soc_pas_mpss	k
+@@ -254,18 +326,30 @@ soc_pas_mpss	k
  soc_smem	k
  soc_smem_size	k
  socinfo	k
@@ -236,7 +237,7 @@ index cb2079e..1fd6ea1 100644
  syssleep	k
  systrace	k
  systrace_name	k
-@@ -280,6 +363,7 @@ torch_max_s	k
+@@ -280,6 +364,7 @@ torch_max_s	k
  torch_secs	k
  touch_flip	k
  touch_lat	ku
@@ -244,7 +245,7 @@ index cb2079e..1fd6ea1 100644
  touch_poll_us	k
  touch_rate	k
  touch_spi_hz	k
-@@ -300,6 +384,7 @@ ufs_probe	l
+@@ -300,6 +385,7 @@ ufs_probe	l
  ufs_shared_pa	k
  ufs_write	kl
  ui_lite	u
@@ -253,7 +254,7 @@ index cb2079e..1fd6ea1 100644
  ustacks_at	k
  ustacks_count	k
 diff --git a/configs/symbols.tsv b/configs/symbols.tsv
-index 17df562..55588e3 100644
+index 17df562..e5581a4 100644
 --- a/configs/symbols.tsv
 +++ b/configs/symbols.tsv
 @@ -1,24 +1,66 @@
@@ -385,7 +386,7 @@ index 17df562..55588e3 100644
  GLBLIT	arg	glblit	GPU and display	u	eagl.c	the surface's memory, as before
  GLCENSUS	arg	glcensus	GPU and display	u	eagl.c	
  GLCOMPILE	arg	glcompile	User space	u	inject.c	
-@@ -133,11 +190,16 @@ GLTRACE_SHADERS	arg	gltrace_shaders	GPU and display	u	eagl.c	the text of the sha
+@@ -133,11 +190,17 @@ GLTRACE_SHADERS	arg	gltrace_shaders	GPU and display	u	eagl.c	the text of the sha
  GLTRACE_UNIFORMS	arg	gltrace_uniforms	GPU and display	u	eagl.c	what the program of a traced draw was given, by the names its shaders use (coord_arg, texmat0, ...)
  GLWAIT	arg	glwait	GPU and display	u	eagl.c	
  GLYES	arg	glyes	User space	u	inject.c	the renderer is made to answer that it has those functions after all
@@ -400,6 +401,7 @@ index 17df562..55588e3 100644
 +GPU_LOG	arg	gpu_log	GPU and display	k	hakios.adreno.c,hakios.gpu_dispatch.c,hakios.redwood_adreno.c	
 +GPU_RECOVER	arg	gpu_recover	User space	k	hakios.redwood_adreno.c	
 +GPU_VA	arg	gpu_va	User space	k	hakios.redwood_adreno.c	
++HAKIOS_DATA	arg	hakios_data	Storage and APFS	kl	hakios.ufs.c,loader.c	and 0 otherwise: nothing is served from a map that is not the volume's now, not even a read
 +HAPTIC_AMP	arg	haptic_amp	Haptics and torch	k	hakios.haptic.c	
 +IRIS_HW	arg	iris_hw	User space	k	hakios.iris_hw.c	
 +LOWDMA	arg	lowdma	Audio and battery	k	hakios.adsp.c,hakios.sound.c	
@@ -407,7 +409,7 @@ index 17df562..55588e3 100644
  M2V_UTRACE	arg	m2v_utrace	User space	u	HakiosMetalCA.m	Turnip's GPU trace of every render pass (u_trace) into a file, printed during the run
  MACHINE_NAME	arg	machine_name	CPU, memory and boot	k	GenericARMPE.cpp	
  MEMBENCH	arg	membench	CPU, memory and boot	k	hakios.cpufreq.c	
-@@ -154,12 +216,7 @@ METAL_M2V	arg	metal_m2v	User space	u	HakiosMetalCA.m
+@@ -154,12 +217,7 @@ METAL_M2V	arg	metal_m2v	User space	u	HakiosMetalCA.m
  METAL_SKIP	arg	metal_skip	User space	u	HakiosMetalCA.m	
  METAL_TRACE	arg	metal_trace	User space	u	HakiosMetalCA.m	
  METAL_WATCH	arg	metal_watch	User space	u	inject.c	
@@ -420,7 +422,7 @@ index 17df562..55588e3 100644
  MODEM_APN	arg	modem_apn	Cellular	k	hakios.mpss.c	a session to that APN instead of the default profile
  MODEM_DATA_NOBIND	arg	modem_data_nobind	Cellular	k	hakios.mpss.c	
  MODEM_DATA_OFF	arg	modem_data_off	Cellular	k	hakios.mpss.c	
-@@ -199,6 +256,8 @@ MODEM_SIM_SWITCH_OFF	arg	modem_sim_switch_off	Cellular	k	hakios.mpss.c
+@@ -199,6 +257,8 @@ MODEM_SIM_SWITCH_OFF	arg	modem_sim_switch_off	Cellular	k	hakios.mpss.c
  MODEM_STEP	arg	modem_step	Cellular	k	hakios.mpss.c	the steps once the root is there, then back to the loader if modem_return=1 says so
  MODEM_WAIT	arg	modem_wait	Cellular	k	hakios.mpss.c	
  MODEM_WDA_OFF	arg	modem_wda_off	Cellular	k	hakios.mpss.c	
@@ -429,7 +431,7 @@ index 17df562..55588e3 100644
  PMIC_LIST	arg	pmic_list	Chip, thermal and PMIC	k	hakios.pmic.c	only the clock, not the inventory of every block
  PRESS_POWER	arg	press_power	Touch and buttons	k	hakios.buttons.c	a short press of the power key that many seconds after boot, and another ten seconds later, given to Darwin as the key's own are (hakios_touch_post):
  PRESS_POWER_MS	arg	press_power_ms	Touch and buttons	k	hakios.buttons.c	
-@@ -217,6 +276,11 @@ RETURN_CPU	arg	return_cpu	CPU, memory and boot	k	loader_return.c
+@@ -217,6 +277,11 @@ RETURN_CPU	arg	return_cpu	CPU, memory and boot	k	loader_return.c
  RETURN_PANIC	arg	return_panic	CPU, memory and boot	k	loader_return.c	
  ROOT_APFS	arg	root_apfs	User space	u	init.c	the root is to be the Darwin root volume on /dev/DEV -- the phone's flash, read only
  SERIAL	arg	serial	Loader	l	loader.c	
@@ -441,7 +443,7 @@ index 17df562..55588e3 100644
  SMALL_CORES	arg	small_cores	CPU, memory and boot	k	(patch)	
  SMALL_CORES_AFTER	arg	small_cores_after	CPU, memory and boot	k	GenericARMPE.cpp	
  SOC_CMD_DB	hex	soc_cmd_db	Cellular	k	hakios.mpss.c	
-@@ -232,16 +296,28 @@ SOC_PAS_MPSS	arg	soc_pas_mpss	Cellular	k	hakios.mpss.c
+@@ -232,16 +297,28 @@ SOC_PAS_MPSS	arg	soc_pas_mpss	Cellular	k	hakios.mpss.c
  SOC_SMEM	hex	soc_smem	Cellular	k	hakios.mpss.c,hakios.socinfo.c	where SMEM is (also the modem driver's argument; 0x80900000 on the reference phone)
  SOC_SMEM_SIZE	hex	soc_smem_size	Chip, thermal and PMIC	k	hakios.socinfo.c	
  SOUND_BELOW	arg	sound_below	Audio and battery	k	hakios.sound.c	
@@ -470,7 +472,7 @@ index 17df562..55588e3 100644
  SYSSLEEP	arg	syssleep	CPU, memory and boot	k	(patch)	
  SYSTRACE	arg	systrace	CPU, memory and boot	k	(patch),user_exception_trace.c	
  SYSTRACE_NAME	arg	systrace_name	CPU, memory and boot	k	(patch)	
-@@ -252,7 +328,8 @@ TORCH	arg	torch	Haptics and torch	kl	hakios.torch.c,loader.c	a look, reading onl
+@@ -252,7 +329,8 @@ TORCH	arg	torch	Haptics and torch	kl	hakios.torch.c,loader.c	a look, reading onl
  TORCH_MAX_S	arg	torch_max_s	Haptics and torch	k	hakios.torch.c	
  TORCH_SECS	arg	torch_secs	Haptics and torch	k	hakios.torch.c	
  TOUCH_FLIP	arg	touch_flip	Touch and buttons	k	hakios.goodix.c	
@@ -480,7 +482,7 @@ index 17df562..55588e3 100644
  TOUCH_POLL_US	arg	touch_poll_us	Touch and buttons	k	hakios.goodix.c	
  TOUCH_RATE	arg	touch_rate	Touch and buttons	k	hakios.goodix.c	the chip reports twice as often (Xiaomi's game mode; 240 otherwise)
  TOUCH_SPI_HZ	arg	touch_spi_hz	Touch and buttons	k	hakios.goodix.c	the bus at N Hz (Android's device tree gives the chip 5 MHz)
-@@ -269,6 +346,7 @@ UFS_NATIVE_SLOTS	arg	ufs_native_slots	Storage and APFS	k	hakios.ufshc.c
+@@ -269,6 +347,7 @@ UFS_NATIVE_SLOTS	arg	ufs_native_slots	Storage and APFS	k	hakios.ufshc.c
  UFS_NATIVE_SPIN	arg	ufs_native_spin	Storage and APFS	k	hakios.ufshc.c	
  UFS_PROBE	arg	ufs_probe	Loader	l	loader.c	
  UI_LITE	arg	ui_lite	User space	u	inject_sb.c	the system's own "Reduce Transparency" and "Reduce Motion" (Settings, Accessibility), for this
@@ -488,7 +490,7 @@ index 17df562..55588e3 100644
  USTACKS	arg	ustacks	Debugging	k	user_exception_trace.c	
  USTACKS_AT	arg	ustacks_at	Debugging	k	user_exception_trace.c	
  USTACKS_COUNT	arg	ustacks_count	Debugging	k	user_exception_trace.c	
-@@ -293,7 +371,7 @@ WIFI_FINE	arg	wifi_fine	Wi-Fi	k	hakios.wifi.c	such a step waits like that before
+@@ -293,7 +372,7 @@ WIFI_FINE	arg	wifi_fine	Wi-Fi	k	hakios.wifi.c	such a step waits like that before
  WIFI_HOLD	arg	wifi_hold	Wi-Fi	k	lx_bus.c	
  WIFI_IRQ	arg	wifi_irq	Wi-Fi	k	lx_bus.c	
  WIFI_JOIN	arg	wifi_join	Wi-Fi	k	lx_bus.c	
@@ -514,7 +516,7 @@ index 85804b0..1a8fbc8 100644
  	path        devices/qemu
  
 diff --git a/docs/boot-args.md b/docs/boot-args.md
-index 0b2df4c..c6bd7c0 100644
+index 0b2df4c..c792e1d 100644
 --- a/docs/boot-args.md
 +++ b/docs/boot-args.md
 @@ -2,29 +2,30 @@
@@ -522,7 +524,7 @@ index 0b2df4c..c6bd7c0 100644
  Made by `tools/boot-args.py --markdown`; CI fails if it is out of date with the source (`tools/boot-args.py --check`).
  
 -Every argument that the kernel, the loader or user space of this port reads, and which file reads it. **350 arguments**: 279 read by the kernel, 14 by the loader, 68 by user space (one is read in more than one place).
-+Every argument that the kernel, the loader or user space of this port reads, and which file reads it. **435 arguments**: 364 read by the kernel, 19 by the loader, 68 by user space (one is read in more than one place).
++Every argument that the kernel, the loader or user space of this port reads, and which file reads it. **436 arguments**: 365 read by the kernel, 20 by the loader, 68 by user space (one is read in more than one place).
  
  This is a catalogue of what exists and who reads it, not a manual. What an argument means is in the head of the file that reads it. The stable switches have a symbol in the configuration (`tools/hakios-config.py help SYMBOL`, `docs/configs.md`); the rest are the knobs of bring-up (a driver's steps, pauses, traces, test modes) and can change with the driver. Any of them can be given in a configuration with `CONFIG_BOOTARGS="name=value ..."`, which checks that each name is in this list. What the arguments of the two Metal paths do: [Metal on the Adreno](reference/metal.md#boot-arguments).
  
@@ -677,7 +679,7 @@ index 0b2df4c..c6bd7c0 100644
  | `speaker_probe` | K | `hakios.speaker.c` | `CONFIG_SPEAKER_PROBE` |  |
  | `virtio_sound` | K | `hakios.virtio_sound.c` | `CONFIG_VIRTIO_SOUND` |  |
  
-@@ -247,19 +287,21 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
+@@ -247,22 +287,24 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
  | `cam_shutter` | K | `hakios.camera.c` | `CONFIG_CAM_SHUTTER` |  |
  | `cam_vblank` | K | `hakios.camera.c` | `CONFIG_CAM_VBLANK` |  |
  
@@ -700,8 +702,20 @@ index 0b2df4c..c6bd7c0 100644
 +| `touchscreen` | K | `hakios.adreno8_rpmh.c`, `hakios.buttons.c`, `hakios.goodix.c` | `CONFIG_TOUCHSCREEN` |  |
  | `virtio_input` | K | `hakios.virtio_input.c` | `CONFIG_VIRTIO_INPUT` |  |
  
- ## Storage and APFS (43)
-@@ -323,7 +365,7 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
+-## Storage and APFS (43)
++## Storage and APFS (44)
+ 
+ | Argument | Layer | Read by | Configuration | Set by |
+ |---|---|---|---|---|
+@@ -295,6 +337,7 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
+ | `apfs_write_byte` | K | `hakios.apfs_check.c` | `CONFIG_APFS_WRITE_BYTE` |  |
+ | `apfs_write_len` | K | `hakios.apfs_check.c` | `CONFIG_APFS_WRITE_LEN` |  |
+ | `apfs_write_path` | K | `hakios.apfs_check.c` | `CONFIG_APFS_WRITE_PATH` |  |
++| `hakios_data` | KL | `hakios.ufs.c`, `loader.c` | `CONFIG_HAKIOS_DATA` |  |
+ | `ufs_bench` | K | `hakios.ufs.c` | `CONFIG_UFS_BENCH` |  |
+ | `ufs_check` | K | `hakios.ufs.c` | `CONFIG_UFS_CHECK` |  |
+ | `ufs_native` | KL | `hakios.ufs.c`, `loader.c` | `CONFIG_UFS_NATIVE` |  |
+@@ -323,7 +366,7 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
  | Argument | Layer | Read by | Configuration | Set by |
  |---|---|---|---|---|
  | `haptic` | K | `hakios.haptic.c` | `CONFIG_HAPTIC` |  |
@@ -710,7 +724,7 @@ index 0b2df4c..c6bd7c0 100644
  | `torch` | KL | `hakios.torch.c`, `loader.c` | `CONFIG_TORCH` |  |
  | `torch_max_s` | K | `hakios.torch.c` | `CONFIG_TORCH_MAX_S` |  |
  | `torch_secs` | K | `hakios.torch.c` | `CONFIG_TORCH_SECS` |  |
-@@ -349,7 +391,7 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
+@@ -349,7 +392,7 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
  |---|---|---|---|---|
  | `applog` | K | `(patch)` | `CONFIG_APPLOG` |  |
  | `applog_name` | K | `(patch)` | `CONFIG_APPLOG_NAME` |  |
@@ -719,7 +733,7 @@ index 0b2df4c..c6bd7c0 100644
  | `cpufreq` | K | `hakios.cpufreq.c` | `CONFIG_CPUFREQ` |  |
  | `cpuload` | K | `hakios.cpufreq.c` | `CONFIG_CPULOAD` |  |
  | `ddr` | K | `hakios.cpufreq.c` | `CONFIG_DDR` |  |
-@@ -357,7 +399,7 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
+@@ -357,7 +400,7 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
  | `ddr_vote` | K | `hakios.cpufreq.c` | `CONFIG_DDR_VOTE` |  |
  | `epoch` | K | `GenericARMPE.cpp` |  | xl (the host's clock) |
  | `hv_wdt_pet` | K | `loader_return.c` |  | the loader, when it has armed the watchdog (the runner also passes it) |
@@ -728,7 +742,7 @@ index 0b2df4c..c6bd7c0 100644
  | `machine_name` | K | `GenericARMPE.cpp` | `CONFIG_MACHINE_NAME` |  |
  | `membench` | K | `hakios.cpufreq.c` | `CONFIG_MEMBENCH` |  |
  | `rd` | KL | `(patch)`, `loader.c` | `CONFIG_RD` |  |
-@@ -382,34 +424,69 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
+@@ -382,34 +425,69 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
  | `ustacks_threads` | K | `user_exception_trace.c` | `CONFIG_USTACKS_THREADS` |  |
  | `ustacks_tname` | K | `user_exception_trace.c` | `CONFIG_USTACKS_TNAME` |  |
  
@@ -803,7 +817,7 @@ index 0b2df4c..c6bd7c0 100644
  | `m2v_utrace` | U | `HakiosMetalCA.m` | `CONFIG_M2V_UTRACE` |  |
  | `metal_all` | U | `HakiosMetalCA.m` | `CONFIG_METAL_ALL` |  |
  | `metal_defer` | U | `HakiosMetalCA.m` | `CONFIG_METAL_DEFER` |  |
-@@ -423,11 +500,19 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
+@@ -423,11 +501,19 @@ Layers: **K** the kernel, **L** the loader, **U** user space (through `sysctl ke
  | `metal_skip` | U | `HakiosMetalCA.m` | `CONFIG_METAL_SKIP` |  |
  | `metal_trace` | U | `HakiosMetalCA.m` | `CONFIG_METAL_TRACE` |  |
  | `metal_watch` | U | `inject.c` | `CONFIG_METAL_WATCH` |  |
@@ -12339,6 +12353,268 @@ index c153e5a..b82aa3e 100644
  	}
  	return NULL;
  }
+diff --git a/drivers/storage/hakios.ufs.c b/drivers/storage/hakios.ufs.c
+index c4b6686..e9e3956 100644
+--- a/drivers/storage/hakios.ufs.c
++++ b/drivers/storage/hakios.ufs.c
+@@ -29,7 +29,9 @@
+  * and the part of it an answer covers is invalidated here before it is copied out.
+  *
+  * The data volume of Darwin (HFS Plus, built into this kernel: bsd/hfs) is /dev/ufs_darwin_data: darwin from
+- * UFS_WRITE_FIRST to its end, a block device of its own that reads and writes, there with ufs_write=1 only. Its
++ * UFS_WRITE_FIRST to its end, a block device of its own that reads and writes, there with ufs_write=1 only; or,
++ * with hakios_data=1, a volume of its own that the loader maps in Android's userdata (/dev/ufs_hakios_data, an
++ * entry of the page marked BLOCK_PART_EXTENTS: the loader serves its blocks from where their map says). Its
+  * writes go the same way as /dev/rufs_darwin's -- through the loader, which flushes and reads every one back before it
+  * answers -- so a write that has come back is on the flash, which is what the file system's journal counts on. The
+  * one and the other are not used in the same run: once the data volume has been opened for writing, the packed store
+@@ -57,6 +59,7 @@
+ #include <sys/proc.h>
+ #include <sys/sysctl.h>
+ #include <sys/uio.h>
++#include <stdarg.h>
+ #include <sys/hakios.input.h>
+ #include <libkern/crc.h>
+ #include <vm/memory_types.h>
+@@ -73,6 +76,7 @@ extern void FlushPoC_DcacheRegion(vm_offset_t va, size_t length);   /* osfmk/arm
+ #define BLOCK_MAX_PARTS    160
+ #define BLOCK_MAX_UNITS    16
+ #define BLOCK_PART_UNIT    1u                          /* a whole logical unit, not a partition */
++#define BLOCK_PART_EXTENTS 2u                          /* a volume mapped in Android's userdata: the loader knows where its blocks are */
+ #define BLOCK_OP_READ      0u
+ #define BLOCK_OP_WRITE     1u
+ #define BLOCK_OP_WRITE_FAST 2u                         /* written only: the data volume's (the loader, BLOCK_OP_WRITE_FAST) */
+@@ -150,6 +154,49 @@ struct loader_block {
+ _Static_assert(__builtin_offsetof(struct loader_block, ask) == 128,
+     "the loader's page must stay the size it was: what is before ask has to fit in its padding");
+ 
++/*
++ * Every line goes to the loader's log directly as well. printf's own output stays in the kernel's message buffer,
++ * which comes back only at the end of a run -- and by then this phone's log storm (the GPU's) has rolled over its
++ * start, so what this driver said as it came up (which partitions there are, which of them takes writes) was
++ * never read. And printf is not for the moment a run ends (hakios.ufshc.c, hc_say_late): the account of the run
++ * goes to the loader's log only.
++ */
++extern void loader_log_putc(char c);
++
++static int say(const char *format, ...) __printflike(1, 2);
++static void say_late(const char *format, ...) __printflike(1, 2);
++
++static int
++say(const char *format, ...)
++{
++	char line[512];
++	va_list list;
++
++	va_start(list, format);
++	vsnprintf(line, sizeof(line), format, list);
++	va_end(list);
++	for (const char *c = line; *c != 0; c++) {
++		loader_log_putc(*c);
++	}
++	return printf("%s", line);
++}
++
++static void
++say_late(const char *format, ...)
++{
++	char line[512];
++	va_list list;
++
++	va_start(list, format);
++	vsnprintf(line, sizeof(line), format, list);
++	va_end(list);
++	for (const char *c = line; *c != 0; c++) {
++		loader_log_putc(*c);
++	}
++}
++
++#define printf say
++
+ #define UFS_PAGE           0x4000UL
+ #define UFS_TIMEOUT_MS     20000        /* core 0 answers in well under a second; this is for a dead loader */
+ 
+@@ -598,10 +645,24 @@ ufs_read(uint32_t part, uint64_t offset, uint8_t *dst, uint64_t len)
+  * which is slower and right. Nothing of Darwin waits on this but the writer itself: the data volume
+  * is in memory (ramfs) and only its copy for the next boot is written here.
+  */
++/* The one partition that takes writes is a volume the loader maps (BLOCK_PART_EXTENTS), not darwin's tail */
++static bool
++ufs_mapped(void)
++{
++	return ufs_write_part >= 0 && (ufs_page->part[ufs_write_part].flags & BLOCK_PART_EXTENTS) != 0;
++}
++
++/* the write partition's first block a write may reach */
++static uint64_t
++ufs_write_first(void)
++{
++	return ufs_mapped() ? ufs_page->write_first : UFS_WRITE_FIRST;
++}
++
+ static int
+ ufs_write(uint32_t op, uint32_t part, uint64_t offset, const uint8_t *src, uint64_t len)
+ {
+-	uint64_t nbs, per;
++	uint64_t nbs, per, first = ufs_write_first();
+ 	int error = 0;
+ 
+ 	if (!ufs_ready || ufs_write_part < 0 || part != (uint32_t)ufs_write_part) {
+@@ -612,8 +673,7 @@ ufs_write(uint32_t op, uint32_t part, uint64_t offset, const uint8_t *src, uint6
+ 	if (len == 0 || offset % nbs != 0 || len % nbs != 0) {
+ 		return EINVAL;          /* whole blocks only: nothing is read before a write */
+ 	}
+-	if (offset / nbs < UFS_WRITE_FIRST || offset > ufs_part_bytes(part) ||
+-	    len > ufs_part_bytes(part) - offset) {
++	if (offset / nbs < first || offset > ufs_part_bytes(part) || len > ufs_part_bytes(part) - offset) {
+ 		/* the Darwin volume, the cryptexes, and anything past the partition's end: never */
+ 		ufs_write_refused++;
+ 		return EROFS;
+@@ -679,16 +739,26 @@ ufs_write_restore(void)
+ 
+ /* ---- the data volume: darwin from UFS_WRITE_FIRST on ---- */
+ 
++/* The data volume's device: darwin's tail under its minor of its own, or -- mapped -- the entry's own block device */
+ static bool
+ ufs_is_data(dev_t dev)
+ {
+-	return ufs_ready && ufs_write_part >= 0 && (uint32_t)minor(dev) == UFS_DATA_MINOR;
++	return ufs_ready && ufs_write_part >= 0 && ((uint32_t)minor(dev) == UFS_DATA_MINOR ||
++	       (ufs_mapped() && (uint32_t)minor(dev) == (uint32_t)ufs_write_part));
++}
++
++/* where the data volume begins in the write partition: past the Darwin volume and the cryptexes in darwin, at the
++ * first block of a volume of its own */
++static uint64_t
++ufs_data_base(void)
++{
++	return ufs_mapped() ? 0 : UFS_WRITE_FIRST * 4096;
+ }
+ 
+ static uint64_t
+ ufs_data_bytes(void)
+ {
+-	return ufs_part_bytes((uint32_t)ufs_write_part) - UFS_WRITE_FIRST * 4096;
++	return ufs_part_bytes((uint32_t)ufs_write_part) - ufs_data_base();
+ }
+ 
+ /*
+@@ -713,7 +783,8 @@ ufs_data_flush(void)
+ 	lck_mtx_lock(&ufs_write_mtx);
+ 	lck_mtx_lock(&ufs_lock);
+ 	/* one block in bounds, for the loader's checks; nothing of it is touched */
+-	error = ufshc_list_in() ? EIO : ufs_request(BLOCK_OP_FLUSH, (uint32_t)ufs_write_part, UFS_WRITE_FIRST, 1, NULL, NULL);
++	error = ufshc_list_in() ? EIO : ufs_request(BLOCK_OP_FLUSH, (uint32_t)ufs_write_part, ufs_data_base() / 4096, 1,
++	    NULL, NULL);
+ 	lck_mtx_unlock(&ufs_lock);
+ 	lck_mtx_unlock(&ufs_write_mtx);
+ 	return error;
+@@ -727,7 +798,7 @@ ufs_data_flush(void)
+ static int
+ ufs_data_io(bool write, uint64_t offset, uint8_t *p, uint64_t len)
+ {
+-	uint64_t base = UFS_WRITE_FIRST * 4096, size = ufs_data_bytes();
++	uint64_t base = ufs_data_base(), size = ufs_data_bytes();
+ 	uint8_t *bounce;
+ 	int error = 0;
+ 
+@@ -1706,6 +1777,25 @@ SYSCTL_QUAD(_kern_hakios, OID_AUTO, ufs_native_fallbacks, CTLFLAG_RD | CTLFLAG_L
+ 
+ /* ---- bringing it up ---- */
+ 
++/*
++ * The run's account, into the loader's log, from hakios_ufs_quiesce() as the kernel is about to hand control
++ * back: what was read and written through the loader, what was refused, and whether the data volume was opened
++ * for writing -- what tells, after a run, whether /private/var was the volume on the storage.
++ */
++void
++hakios_ufs_say_end(void)
++{
++	const char *name = ufs_write_part >= 0 ? (const char *)ufs_page->part[ufs_write_part].name : "nothing";
++
++	if (!ufs_ready) {
++		return;
++	}
++	say_late("ufs: at the end: %llu reads (%llu bytes), %llu errors; the loader refused or failed %llu requests; "
++	    "%llu writes (%llu bytes) into %s, %llu did not finish, %llu refused here; the data volume %s this run\n",
++	    ufs_requests, ufs_bytes, ufs_errors, (uint64_t)ufs_page->answer.failed, ufs_writes, ufs_write_bytes, name,
++	    ufs_write_errors, ufs_write_refused, ufs_data_used ? "was opened for writing" : "was NOT opened for writing");
++}
++
+ void
+ hakios_ufs_init(void)
+ {
+@@ -1813,6 +1903,46 @@ hakios_ufs_init(void)
+ 		}
+ 	}
+ 
++	/*
++	 * hakios_data=1: the volume the loader maps in Android's userdata (xnuloader/loader.c, BLOCK_PART_EXTENTS) is
++	 * /dev/ufs_NAME, a block device that reads and writes: where Darwin keeps /private/var on a phone whose userdata
++	 * is encrypted below its file system, where nothing written through Android's file system could be read back
++	 * (docs/data-persistence.md). The loader holds the map of the volume's blocks -- sent by the host as the phone
++	 * leaves Android, with a guard for every extent -- and serves the volume only where the map says it is; this
++	 * kernel's part is to take the entry only for what it is: the one the loader offers for writing, of the mapped
++	 * kind, in blocks of 4096 and writable from its first block on. The two ways are not mixed: ufs_write=1 is for
++	 * darwin's tail.
++	 */
++	check = 0;
++	if (PE_parse_boot_argn("hakios_data", &check, sizeof(check)) && check == 1) {
++		uint32_t offered = ufs_page->write_part_plus_one;
++		const char *why = NULL;
++
++		if (ufs_write_part >= 0) {
++			why = "ufs_write=1 asked for darwin as well";
++		} else if (offered == 0 || offered > ufs_parts) {
++			printf("ufs: hakios_data=1, but the loader offers no volume to write into: no map was sent, or the volume "
++			    "is not where its map says -- the loader's own log (oem log) says which\n");
++		} else if (!(ufs_page->part[offered - 1].flags & BLOCK_PART_EXTENTS)) {
++			why = "what the loader offers is not a volume mapped in userdata";
++		} else if (ufs_page->write_first != 0 || ufs_page->part[offered - 1].block_size != 4096 ||
++		    ufs_page->part[offered - 1].blocks == 0) {
++			why = "it is not writable from its first block on, in blocks of 4096";
++		}
++		if (why != NULL) {
++			printf("ufs: hakios_data=1: no write will be asked for: %s\n", why);
++		} else if (offered != 0) {
++			volatile struct loader_block_part *e = &ufs_page->part[offered - 1];
++
++			ufs_write_part = (int)(offered - 1);
++			printf("ufs: /dev/ufs_%s: %llu MB mapped in Android's userdata by the loader, a block device that takes "
++			    "writes; everything else of the storage is read only; %s\n", (const char *)e->name,
++			    ufs_data_bytes() >> 20,
++			    ufs_data_op() == BLOCK_OP_WRITE_FAST ? "writes flushed when the file system asks" :
++			    "every write flushed and read back (an older loader)");
++		}
++	}
++
+ 	/*
+ 	 * ufs_native=1: through this kernel's own driver instead, its own transfer list in the
+ 	 * controller for the run, if all is as expected; 2: only look; 3: a dry run -- the list in and
+diff --git a/drivers/storage/hakios.ufshc.c b/drivers/storage/hakios.ufshc.c
+index 3f45b99..b37289b 100644
+--- a/drivers/storage/hakios.ufshc.c
++++ b/drivers/storage/hakios.ufshc.c
+@@ -1317,6 +1317,8 @@ hakios_ufs_quiesce(void)
+ {
+ 	struct hc_put_back_result r;
+ 
++	hakios_ufs_say_end();         /* first: the reads and writes of the run through the loader, said plain */
++
+ 	if (hc_kept_count != 0) {
+ 		hc_say_late("ufs: native: what happened in this run, again:\n");
+ 		for (uint32_t i = hc_kept_count > KEPT_LINES ? hc_kept_count - KEPT_LINES : 0; i < hc_kept_count; i++) {
+diff --git a/drivers/storage/hakios.ufshc.h b/drivers/storage/hakios.ufshc.h
+index 7b29ce8..859742b 100644
+--- a/drivers/storage/hakios.ufshc.h
++++ b/drivers/storage/hakios.ufshc.h
+@@ -28,5 +28,6 @@ bool ufshc_list_in(void);
+ int ufshc_read(uint8_t lun, uint64_t offset, uint8_t *dst, uint64_t len);
+ void ufshc_report(const char *when);
+ void hakios_ufs_quiesce(void);
++void hakios_ufs_say_end(void);          /* the run's account, into the loader's log */
+ 
+ #endif
 diff --git a/drivers/wifi/hakios.apple80211.c b/drivers/wifi/hakios.apple80211.c
 index 62662f7..032b764 100644
 --- a/drivers/wifi/hakios.apple80211.c
@@ -17127,7 +17403,7 @@ index 0000000..cc07b90
 +};
 +
 diff --git a/xnuloader/loader.c b/xnuloader/loader.c
-index 422f9d3..acd04b3 100644
+index 422f9d3..e0d8a6a 100644
 --- a/xnuloader/loader.c
 +++ b/xnuloader/loader.c
 @@ -18,6 +18,7 @@
@@ -17159,7 +17435,19 @@ index 422f9d3..acd04b3 100644
  
  struct boot_args {
  	uint16_t revision;
-@@ -303,7 +307,7 @@ find_log_partition(void)
+@@ -85,7 +89,10 @@ static efi_system_table *ST;
+ static efi_boot_services *BS;
+ static efi_handle IMAGE;
+ 
+-static char log_buf[32768];
++/* 256 KiB: at 32 KiB the survey alone (ufs=1 or ufs=2: every partition of every unit, a line each) filled it on a
++ * phone with a hundred and forty partitions, and print() stops silently when it is full -- so what a run said
++ * after that (the block service's own lines, the data volume's) was never read. */
++static char log_buf[256 * 1024];
+ static uint32_t log_len;
+ 
+ void *
+@@ -303,7 +310,7 @@ find_log_partition(void)
   * fetches over USB (fastboot get_staged).
   */
  /* aligned for any firmware's block I/O: U-Boot's wants a buffer aligned to the block size (media->io_align) */
@@ -17168,7 +17456,7 @@ index 422f9d3..acd04b3 100644
  /* the storage's reads for the kernel land here (block_poll), and nothing else may be put in it */
  #define BLOCK_BUFFER_SIZE  (4u << 20)
  static uint8_t block_buffer[BLOCK_BUFFER_SIZE] __attribute__((aligned(0x2000)));
-@@ -315,6 +319,11 @@ static uint8_t block_buffer[BLOCK_BUFFER_SIZE] __attribute__((aligned(0x2000)));
+@@ -315,6 +322,11 @@ static uint8_t block_buffer[BLOCK_BUFFER_SIZE] __attribute__((aligned(0x2000)));
  static uint8_t log_verify[sizeof(out_buf) + 8192] __attribute__((aligned(0x2000)));
  static const char *staged_data = out_buf;   /* what "upload" sends: normally the log in out_buf */
  static uint64_t staged_len;
@@ -17180,7 +17468,7 @@ index 422f9d3..acd04b3 100644
  
  static void
  compose_logs(const char *klog, uint64_t klog_len)
-@@ -323,10 +332,12 @@ compose_logs(const char *klog, uint64_t klog_len)
+@@ -323,10 +335,12 @@ compose_logs(const char *klog, uint64_t klog_len)
  	uint64_t n = log_len;
  
  	staged_data = out_buf;
@@ -17193,7 +17481,7 @@ index 422f9d3..acd04b3 100644
  			klog_len = sizeof(out_buf) - n - 8192;
  		}
  		memcpy(out_buf + n, sep, sizeof(sep) - 1);
-@@ -337,10 +348,15 @@ compose_logs(const char *klog, uint64_t klog_len)
+@@ -337,10 +351,15 @@ compose_logs(const char *klog, uint64_t klog_len)
  		n += sizeof(end) - 1;
  	}
  	staged_len = n;
@@ -17209,7 +17497,7 @@ index 422f9d3..acd04b3 100644
  static void hc_print_state(const char *when);
  static void hc_take_back(const char *when);
  
-@@ -367,7 +383,7 @@ write_logs(const char *klog, uint64_t klog_len)
+@@ -367,7 +386,7 @@ write_logs(const char *klog, uint64_t klog_len)
  	int same = 0;
  
  	/* only through UEFI's own transfer list (see hc_take_back) */
@@ -17218,7 +17506,7 @@ index 422f9d3..acd04b3 100644
  		if (hc_log_skips++ < 2) {
  			hc_print_state("log not written");
  			print("log: NOT WRITTEN to logdump: UEFI's transfer list is not the one in the controller\n");
-@@ -450,6 +466,154 @@ dt_prop_u32(struct dt_writer *w, const char *name, uint32_t value)
+@@ -450,6 +469,154 @@ dt_prop_u32(struct dt_writer *w, const char *name, uint32_t value)
  	dt_prop(w, name, &value, sizeof(value));
  }
  
@@ -17373,7 +17661,7 @@ index 422f9d3..acd04b3 100644
  static void
  dt_prop_u64(struct dt_writer *w, const char *name, uint64_t value)
  {
-@@ -561,8 +725,25 @@ struct platform {
+@@ -561,8 +728,25 @@ struct platform {
  	int core_shift;                  /* ... in this bit of MPIDR: the phone numbers them in the second affinity field */
  	uint32_t timeout_scale;          /* a kernel on several cores gets this much longer to wait for a lock, 0: as it is */
  	uint32_t small_cores;            /* a bit for each of the slower cores, by number: "small-core" in the device tree */
@@ -17399,7 +17687,7 @@ index 422f9d3..acd04b3 100644
  static const struct platform platform_qemu_virt = {
  	.name = "qemu-virt", .io_base = 0x08000000, .io_size = 0x08000000,
  	.gic_dist = 0x08000000, .gic_redist = 0x080A0000, .uart = 0x09000000, .psci_hvc = 1,
-@@ -588,6 +769,18 @@ static const struct platform platform_redwood = {
+@@ -588,6 +772,18 @@ static const struct platform platform_redwood = {
  	.small_cores = 0x0f,
  };
  
@@ -17418,7 +17706,7 @@ index 422f9d3..acd04b3 100644
  /* ------------------------------------------------------------------------ */
  
  static void
-@@ -888,6 +1081,10 @@ static uint64_t smc_x3;
+@@ -888,6 +1084,10 @@ static uint64_t smc_x3;
  static const struct platform *PLAT;
  static void clean_dcache(uint64_t start, uint64_t end);
  static void flush_dcache(uint64_t start, uint64_t end);
@@ -17429,7 +17717,915 @@ index 422f9d3..acd04b3 100644
  
  /* What the kernel shows a watching loader (struct loader_live in XNU's loader_return.c). */
  struct kernel_live {
-@@ -2352,13 +2549,18 @@ run_on_other_cpu(uint64_t mpidr, uint64_t entry, uint64_t boot_args_pa, const st
+@@ -1468,6 +1668,23 @@ ufs_survey(void)
+ 		if ((r = ufs_reference_of(name)) >= 0) {
+ 			ufs_hash_partition(bio, name, ufs_references[r].bytes);
+ 		}
++	}
++	print("ufs: %d raw units, %d partitions\n", units, partitions);
++	/*
++	 * The dumps last: the log holds 256 KiB, and one dump of super's tables can be more than that, which
++	 * would drop the partitions printed after it -- the lines a survey is read for. What follows this
++	 * point can be cut short; nothing above it can.
++	 */
++	for (uint64_t i = 0; i < count; i++) {
++		efi_partition_info *info;
++		efi_block_io *bio;
++		char name[40];
++
++		if (EFI_ERROR(BS->handle_protocol(handles[i], &part_guid, (void **)&info)) || info->type != 2 ||
++		    EFI_ERROR(BS->handle_protocol(handles[i], &blk_guid, (void **)&bio))) {
++			continue;
++		}
++		ufs_name(info, name, sizeof(name));
+ 		if (name[0] == 's' && name[1] == 'u' && name[2] == 'p' && name[3] == 'e' && name[4] == 'r' && name[5] == 0) {
+ 			ufs_dump_super(bio);
+ 		}
+@@ -1477,7 +1694,6 @@ ufs_survey(void)
+ 		}
+ 	}
+ 	BS->free_pool(handles);
+-	print("ufs: %d raw units, %d partitions\n", units, partitions);
+ }
+ 
+ /* ------------------------------------------------------------------------ */
+@@ -1522,6 +1738,13 @@ ufs_survey(void)
+ #define BLOCK_OP_WRITE_FAST 2u
+ #define BLOCK_OP_FLUSH     3u                          /* the write partition's cache to the flash; one block in bounds */
+ #define BLOCK_CAN_FAST     1u
++/*
++ * An entry whose blocks are not together (BLOCK_PART_EXTENTS): a volume that lives in Android's userdata, in the
++ * blocks of a file of ours there (hakios_data, hakios_system: below). Where they are is the loader's to know: a
++ * request to the
++ * entry's block L is served from the partition's block the map names, extent by extent.
++ */
++#define BLOCK_PART_EXTENTS 2u
+ 
+ /*
+  * The one partition a write may reach, and from which of its blocks. darwin is the port's own
+@@ -1622,6 +1845,7 @@ static efi_block_io *block_bios[BLOCK_MAX_PARTS];
+ static int block_enabled;
+ static int block_write_requested;       /* ufs_write=1 on the command line */
+ static int block_write_part = -1;       /* the only partition a write may reach; -1: none, writes refused */
++static uint64_t block_write_first = BLOCK_WRITE_FIRST;    /* in the write partition: the first block a write may reach */
+ static uint64_t block_writes, block_writes_refused, block_write_bytes;
+ 
+ /* the bytes of a device path before its end node */
+@@ -1869,42 +2093,660 @@ block_tables(void)
+ }
+ 
+ /*
+- * Is this partition the one a write may reach? Everything about it has to be what it was when the
+- * port was set up; one field out of place and nothing is written this run. The name UEFI reports
+- * is already in bp->name (ufs_name), in ASCII.
++ * Is this partition the one a write may reach? Everything about it has to be what it was when the
++ * port was set up; one field out of place and nothing is written this run. The name UEFI reports
++ * is already in bp->name (ufs_name), in ASCII.
++ */
++static int
++block_is_darwin(const efi_partition_info *info, const efi_block_io *bio, const struct loader_block_part *bp)
++{
++	static const efi_guid type = BLOCK_DARWIN_TYPE;
++	const uint8_t *u = (const uint8_t *)&info->unique_guid;
++	static const char name[] = "darwin";
++	const char *why = NULL;
++
++	for (unsigned i = 0; i < sizeof(name); i++) {
++		if (bp->name[i] != name[i]) {
++			return 0;               /* another partition: nothing to say about it */
++		}
++	}
++	if (memcmp(&info->type_guid, &type, sizeof(type)) != 0) {
++		why = "its type GUID is not the one it had";
++	} else if (bp->unit != 0) {
++		/* the first unit UEFI lists: this firmware's device paths say no logical unit number
++		 * (device_path_print finds no 3.19 node), so bp->lun is 0xff for every unit */
++		why = "it is not on the first logical unit";
++	} else if (bp->block_size != 4096 || bp->blocks < BLOCK_DARWIN_MIN ||
++	    info->end_lba - info->start_lba + 1 != bp->blocks) {
++		why = "it is not 20 GiB in blocks of 4096";
++	} else if (bio->media->read_only) {
++		why = "UEFI gives it out read only";
++	}
++	if (why != NULL) {
++		print("ufs: darwin: no write will be served: %s\n", why);
++		return 0;
++	}
++	print("ufs: darwin (LBA %d..%d of unit 0, unique GUID %x...%x): its blocks from %d on may be written this run\n",
++	    info->start_lba, info->end_lba, (uint64_t)u[3] << 24 | (uint64_t)u[2] << 16 | (uint64_t)u[1] << 8 | u[0],
++	    (uint64_t)u[12] << 24 | (uint64_t)u[13] << 16 | (uint64_t)u[14] << 8 | u[15], BLOCK_WRITE_FIRST);
++	return 1;
++}
++
++/*
++ * ---- volumes mapped in Android's userdata ----
++ *
++ * On a phone whose userdata is encrypted below its file system (dm-default-key), the bytes Android writes are
++ * nobody else's to read; what its file system is good for is to hold blocks. tools/hakios-pin/hakios-pin.c makes an
++ * empty file there, pins it (f2fs keeps a pinned file's blocks where they are), reserves its size, and puts an
++ * image onto those blocks of the raw partition itself, in plaintext. They are served here as UEFI's driver hands
++ * them out: neither what Android's kernel sees through the device-mapper it puts over userdata, nor anywhere it
++ * writes itself.
++ *
++ * Two volumes, each a file of Android's (docs/data-persistence.md):
++ *   hakios_data    the data volume: an HFS Plus file system where Darwin keeps /private/var, written by iOS with
++ *                  hakios_data=1;
++ *   hakios_system  the system image, system.apfs as the host uploads it at every boot otherwise: read only, and
++ *                  read by this loader into the RAM disk's place ("oem hakios-resident") in a few seconds, where
++ *                  its 2.4 GB over USB took a minute.
++ *
++ * Where the blocks are is the map of each, which the host takes from the phone -- from Android, with root, each
++ * time before the phone leaves Android (tools/hakios-data.py boot) -- and sends ("oem hakios-map" for the data
++ * volume, "oem hakios-sysmap" for the system image; each followed by a download):
++ *
++ *     extent L P N       the volume's N blocks from L on, at the partition's block P on
++ *     guard  I 0x...     extent I: the FNV-1a 64 of its first block, then of its last, as Android's raw device
++ *                        held them when the map was made (32 hex digits)
++ *     marker 0x...       the data volume: 16 bytes its first block holds at HAKIOS_MARKER_AT (past HFS Plus's
++ *                        volume header, where nothing of the file system's ever comes)
++ *     readonly           the system image: no marker is looked for, and nothing is ever written to it
++ *     bytes  N           the system image's size in bytes: what goes into RAM (its blocks are rounded up)
++ *
++ * The map is checked as it comes and again at every run against the partition as UEFI lists it then. And a
++ * volume is served only on a map that is whole and current: every extent has its guard, and the first and the
++ * last block of every extent still hold what their guard says (the data volume's first block also its marker).
++ * For a pin is not a guarantee: a foreground GC with the storage nearly full moves a pinned file's blocks a
++ * section at a time -- its first block staying where it is while others move, which a marker alone could not
++ * tell -- and a write by a stale map would land in whatever Android keeps there now. The host reads the guards a
++ * moment before Android stops, and nothing moves once it has: so a block that does not hold its guard has moved
++ * in between, and nothing is served. Asked once for a map (verified): Android cannot move a block while this
++ * loader has the phone, and after a run the first and the last blocks of an extent hold what the run wrote
++ * there. "getvar hakios-volume" and "getvar hakios-system" say what the last look found ("oem hakios-info"
++ * looks again).
++ */
++#define HAKIOS_BACKING        "userdata"            /* the GPT partition whose blocks the extents name */
++#define HAKIOS_MAX_EXT        32768u
++#define HAKIOS_MAP_BYTES      (4u * 1024u * 1024u)
++#define HAKIOS_MARKER_AT      2048u
++#define HAKIOS_RESIDENT_CHUNK 256u                  /* blocks of the system image read into RAM at a time: 1 MiB */
++
++enum { HAKIOS_DATA, HAKIOS_SYSTEM, HAKIOS_VOLUMES };
++
++struct hakios_extent {
++	uint64_t lblk, pblk, n;                     /* blocks of 4096: the volume's block lblk on, at the partition's pblk on */
++	uint8_t guard[16];                          /* the FNV-1a 64 of its first block, then of its last: 8 bytes each, the greatest first */
++	uint8_t guarded;                            /* the map names one for this extent */
++};
++
++struct hakios_volume {
++	const char *name;                           /* as the kernel's block device has it: ufs_NAME */
++	int loaded;                                 /* a map of the host's is here, and it held together */
++	int readonly;                               /* the map says so: no marker, and nothing is written to it */
++	efi_block_io *bio;                          /* userdata, as UEFI listed it when the volume was last looked at */
++	uint64_t bytes;                             /* what the host has in it: blocks * 4096, or "bytes N" */
++	uint64_t map_bytes;                         /* "bytes N" as the map said it: 0 when it said nothing */
++	uint64_t blocks;                            /* the volume's size in blocks */
++	uint32_t n_ext;
++	uint8_t marker[16];                         /* all zero: the map names none */
++	int verified;                               /* found where it says, in this loader's session */
++	char verdict[64];                           /* "getvar hakios-volume" / "hakios-system": what the last look found */
++	struct hakios_extent ext[HAKIOS_MAX_EXT];
++};
++
++static struct hakios_volume hakios[HAKIOS_VOLUMES] = {
++	{ .name = "hakios_data" },
++	{ .name = "hakios_system" },
++};
++static char hakios_text[HAKIOS_VOLUMES][HAKIOS_MAP_BYTES];     /* the maps as they come off the USB */
++static int download_to_hakios = -1;            /* the volume whose map the next download is (-1: none) */
++static int hakios_data_requested;              /* hakios_data=1 on the command line */
++static int8_t block_part_volume[BLOCK_MAX_PARTS];   /* of a page entry with BLOCK_PART_EXTENTS: which volume */
++static efi_block_io *partition_bio(const char *name);      /* (below, in front of fb_command) */
++
++static uint64_t
++hakios_number(const char **s)
++{
++	uint64_t v = 0;
++
++	while (**s >= '0' && **s <= '9') {
++		v = v * 10 + (uint64_t)(**s - '0');
++		(*s)++;
++	}
++	return v;
++}
++
++static void
++hakios_spaces(const char **s)
++{
++	while (**s == ' ') {
++		(*s)++;
++	}
++}
++
++/* by pblk, for the overlap check (the extents come in the volume's own order) */
++static void
++hakios_sort(struct hakios_extent *e, int64_t lo, int64_t hi)
++{
++	while (lo < hi) {
++		uint64_t pivot = e[(lo + hi) / 2].pblk;
++		int64_t i = lo, j = hi;
++
++		while (i <= j) {
++			while (e[i].pblk < pivot) {
++				i++;
++			}
++			while (e[j].pblk > pivot) {
++				j--;
++			}
++			if (i <= j) {
++				struct hakios_extent t = e[i];
++
++				e[i] = e[j], e[j] = t, i++, j--;
++			}
++		}
++		/* the smaller side by recursion, the larger by the loop: so many levels only */
++		if (j - lo < hi - i) {
++			hakios_sort(e, lo, j);
++			lo = i;
++		} else {
++			hakios_sort(e, i, hi);
++			hi = j;
++		}
++	}
++}
++
++/* a few words of this loader's own in OUT, a number where there is one (NO_NUMBER: none), and the rest */
++#define NO_NUMBER         ~0ULL
++
++static void
++hakios_say(char out[64], const char *what, uint64_t number, const char *after)
++{
++	char tmp[24];
++	uint32_t n = 0;
++	int i = 0;
++
++	while (*what && n < 64 - 26) {
++		out[n++] = *what++;
++	}
++	if (number != NO_NUMBER) {
++		do {
++			tmp[i++] = (char)('0' + number % 10);
++			number /= 10;
++		} while (number);
++		while (i) {
++			out[n++] = tmp[--i];
++		}
++	}
++	while (*after && n < 63) {
++		out[n++] = *after++;
++	}
++	out[n] = 0;
++}
++
++static void
++hakios_say_verdict(struct hakios_volume *h, const char *what, uint64_t number, const char *after)
++{
++	hakios_say(h->verdict, what, number, after);
++}
++
++/* N bytes as 2N hex digits at *s, and on past them. 0 when there are that many */
++static int
++hakios_hex(const char **s, uint8_t *out, unsigned n)
++{
++	unsigned i;
++
++	for (i = 0; i < n; i++) {
++		char hc = (*s)[2 * i], lc = (*s)[2 * i + 1];
++		int hi = hc >= '0' && hc <= '9' ? hc - '0' : hc >= 'a' && hc <= 'f' ? hc - 'a' + 10 :
++		    hc >= 'A' && hc <= 'F' ? hc - 'A' + 10 : -1;
++		int lo = lc >= '0' && lc <= '9' ? lc - '0' : lc >= 'a' && lc <= 'f' ? lc - 'a' + 10 :
++		    lc >= 'A' && lc <= 'F' ? lc - 'A' + 10 : -1;
++
++		if (hi < 0 || lo < 0) {
++			return 1;
++		}
++		out[i] = (uint8_t)(hi * 16 + lo);
++	}
++	*s += 2 * n;
++	return 0;
++}
++
++/* The map's text, as the host sent it. 0 when it is a map this loader can serve. */
++static int
++hakios_map_parse(struct hakios_volume *h)
++{
++	const char *s = hakios_text[h - hakios];
++	uint64_t blocks = 0, bytes = 0;
++	uint32_t n = 0, guarded = 0;
++	uint8_t marker[16];
++	int marker_said = 0, readonly = 0, bad = 0;
++	uint32_t had = h->loaded ? h->n_ext : 0;
++	int same = 1;                               /* the extents, the marker and the size of the map that is here already */
++
++	h->loaded = 0;
++	memset(marker, 0, sizeof(marker));
++	while (*s && !bad) {
++		if (memcmp(s, "extent ", 7) == 0) {
++			uint64_t l, pb, k;
++
++			s += 7;
++			l = hakios_number(&s);
++			hakios_spaces(&s);
++			pb = hakios_number(&s);
++			hakios_spaces(&s);
++			k = hakios_number(&s);
++			if (n < had) {
++				same &= h->ext[n].lblk == l && h->ext[n].pblk == pb && h->ext[n].n == k;
++			}
++			if (k == 0 || l != blocks || pb > ~0ULL - k) {
++				print("hakios: %s: the map's extent %d (%d blocks at %d after the volume's block %d) is out of order"
++				    " or empty: refused\n", h->name, (uint64_t)n, k, pb, l);
++				bad = 1;
++			} else if (n == HAKIOS_MAX_EXT) {
++				print("hakios: %s: more extents in the map than this loader holds (%d): refused\n", h->name,
++				    (uint64_t)n);
++				bad = 1;
++			} else {
++				h->ext[n].lblk = l;
++				h->ext[n].pblk = pb;
++				h->ext[n].n = k;
++				h->ext[n].guarded = 0;
++				n++;
++				blocks = l + k;
++			}
++		} else if (memcmp(s, "marker 0x", 9) == 0) {
++			s += 9;
++			if (hakios_hex(&s, marker, 16) != 0) {
++				print("hakios: %s: the map's marker is not 32 hex digits: refused\n", h->name);
++				bad = 1;
++			}
++			marker_said = 1;
++		} else if (memcmp(s, "guard ", 6) == 0) {
++			uint64_t index;
++
++			s += 6;
++			index = hakios_number(&s);
++			hakios_spaces(&s);
++			if (index >= n) {
++				print("hakios: %s: the map's guard %d is for an extent it does not have (it has %d): refused\n",
++				    h->name, index, (uint64_t)n);
++				bad = 1;
++			} else if (memcmp(s, "0x", 2) != 0) {
++				print("hakios: %s: the map's guard %d does not begin with 0x: refused\n", h->name, index);
++				bad = 1;
++			} else {
++				s += 2;
++				if (hakios_hex(&s, h->ext[index].guard, 16) != 0) {
++					print("hakios: %s: the map's guard %d is not 32 hex digits: refused\n", h->name, index);
++					bad = 1;
++				} else {
++					h->ext[index].guarded = 1;
++				}
++			}
++		} else if (memcmp(s, "readonly", 8) == 0 && (s[8] == '\n' || s[8] == 0)) {
++			readonly = 1;
++			s += 7;
++		} else if (memcmp(s, "bytes ", 6) == 0) {
++			s += 6;
++			bytes = hakios_number(&s);
++			s--;
++		}
++		while (*s && *s != '\n') {
++			s++;
++		}
++		if (*s) {
++			s++;
++		}
++	}
++	if (!bad && n == 0) {
++		print("hakios: %s: the map holds no extent\n", h->name);
++		bad = 1;
++	}
++	if (!bad && bytes > blocks * 4096) {
++		print("hakios: %s: the map's %d bytes are more than its %d blocks hold: refused\n", h->name, bytes,
++		    blocks * 4096);
++		bad = 1;
++	}
++	if (bad) {
++		h->verified = 0;
++		hakios_say_verdict(h, "refused: its log says why", NO_NUMBER, "");
++		return 1;
++	}
++	for (uint32_t i = 0; i < n; i++) {
++		guarded += h->ext[i].guarded != 0;
++	}
++	if (n != had || memcmp(h->marker, marker, sizeof(marker)) != 0 || bytes != h->map_bytes ||
++	    readonly != h->readonly) {
++		same = 0;
++	}
++	h->n_ext = n;
++	h->blocks = blocks;
++	h->map_bytes = bytes;
++	h->bytes = bytes != 0 ? bytes : blocks * 4096;
++	h->readonly = readonly;
++	memcpy(h->marker, marker, sizeof(marker));
++	h->loaded = 1;
++	/* the map that was verified, sent again as it was, stays verified; anything else is looked at when asked of */
++	h->verified = h->verified && same;
++	hakios_say_verdict(h, h->verified ? "whole: as verified before" : "a map is here; not looked at yet", NO_NUMBER, "");
++	print("hakios: the map of %s: %d extents, %d blocks (%d MiB%s), %d bytes of image; %s; a guard for %d of %d"
++	    " extents\n", h->name, (uint64_t)n, blocks, blocks * 4096 >> 20, readonly ? ", read only" : "", bytes,
++	    marker_said ? "a marker is named" : readonly ? "no marker (read only)" : "NO marker: nothing will be served from it",
++	    (uint64_t)guarded, (uint64_t)n);
++	return 0;
++}
++
++/* The extents against the partition as UEFI lists it: every block of the volume inside it, and no two on one. */
++static int
++hakios_fits(struct hakios_volume *h, efi_block_io *bio)
++{
++	struct hakios_extent *sorted;
++	uint64_t part_blocks = bio->media->last_block + 1;
++	uint32_t i;
++
++	if (bio->media->block_size != 4096) {
++		print("hakios: %s's blocks are %d bytes, not 4096: refused\n", HAKIOS_BACKING, (uint64_t)bio->media->block_size);
++		return 0;
++	}
++	for (i = 0; i < h->n_ext; i++) {
++		if (h->ext[i].pblk + h->ext[i].n > part_blocks) {
++			print("hakios: extent %d of the map is past the end of %s: refused\n", (uint64_t)i, HAKIOS_BACKING);
++			return 0;
++		}
++	}
++	if (h->n_ext * sizeof(*sorted) > sizeof(ufs_buffer)) {
++		print("hakios: more extents in the map than this loader sorts at once (%d): refused\n", (uint64_t)h->n_ext);
++		return 0;
++	}
++	/* (ufs_buffer is the survey's: free while no kernel runs, which is when this is asked) */
++	sorted = (struct hakios_extent *)(void *)ufs_buffer;
++	memcpy(sorted, h->ext, h->n_ext * sizeof(*sorted));
++	hakios_sort(sorted, 0, (int64_t)h->n_ext - 1);
++	for (i = 1; i < h->n_ext; i++) {
++		if (sorted[i].pblk < sorted[i - 1].pblk + sorted[i - 1].n) {
++			print("hakios: two extents of the map are on one block: refused\n");
++			return 0;
++		}
++	}
++	return 1;
++}
++
++/* Does the volume's first block hold the marker the map names? Read the way the kernel will read it.
++ * 1 when it does, 0 when it holds something else, -1 when it could not be read. */
++static int
++hakios_marker_ok(struct hakios_volume *h)
++{
++	if (EFI_ERROR(h->bio->read_blocks(h->bio, h->bio->media->media_id, h->ext[0].pblk, 4096, ufs_buffer))) {
++		print("hakios: %s: its first block could not be read\n", h->name);
++		return -1;
++	}
++	if (memcmp(ufs_buffer + HAKIOS_MARKER_AT, h->marker, sizeof(h->marker)) != 0) {
++		print("hakios: %s: its first block does NOT hold the marker the map names: these are not the volume's"
++		    " blocks\n", h->name);
++		return 0;
++	}
++	return 1;
++}
++
++/* the same sum hakios-pin makes of a block (hakios-pin.c, fnv) */
++static uint64_t
++hakios_fnv64(const uint8_t *b, uint64_t n)
++{
++	uint64_t h = 0xcbf29ce484222325ULL;
++
++	while (n--) {
++		h ^= *b++;
++		h *= 0x100000001b3ULL;
++	}
++	return h;
++}
++
++/* v as 8 bytes, the greatest first: the order the map's guards are written in */
++static void
++hakios_put64(uint8_t *out, uint64_t v)
++{
++	for (unsigned i = 0; i < 8; i++) {
++		out[i] = (uint8_t)(v >> (56 - 8 * i));
++	}
++}
++
++static uint64_t
++hakios_get64(const uint8_t *in)
++{
++	uint64_t v = 0;
++
++	for (unsigned i = 0; i < 8; i++) {
++		v = (v << 8) | in[i];
++	}
++	return v;
++}
++
++/* the guard of the partition's block pblk, into out: 0 when it could not be read */
++static int
++hakios_guard_of(struct hakios_volume *h, uint64_t pblk, uint8_t *out)
++{
++	if (EFI_ERROR(h->bio->read_blocks(h->bio, h->bio->media->media_id, pblk, 4096, ufs_buffer))) {
++		return 0;
++	}
++	hakios_put64(out, hakios_fnv64(ufs_buffer, 4096));
++	return 1;
++}
++
++/*
++ * Does every extent still begin and end where it did when the host read its guard in Android? 0 when the map has
++ * no guard for each of them, or when one of them does not -- having said which: the blocks have moved since the
++ * map was made, and what the map names is somebody else's now.
++ */
++static int
++hakios_guards_hold(struct hakios_volume *h)
++{
++	uint32_t i, guarded = 0;
++
++	for (i = 0; i < h->n_ext; i++) {
++		guarded += h->ext[i].guarded != 0;
++	}
++	if (guarded != h->n_ext) {
++		print("hakios: %s: the map names a guard for %d of its %d extents: not whole, nothing is served\n", h->name,
++		    (uint64_t)guarded, (uint64_t)h->n_ext);
++		hakios_say_verdict(h, "not whole: a guard for ", (uint64_t)guarded, " extents only");
++		return 0;
++	}
++	for (i = 0; i < h->n_ext; i++) {
++		const struct hakios_extent *e = &h->ext[i];
++		uint8_t g[16];
++
++		if (!hakios_guard_of(h, e->pblk, g) || !hakios_guard_of(h, e->pblk + e->n - 1, g + 8)) {
++			print("hakios: %s: extent %d's first or last block could not be read: nothing is served\n", h->name,
++			    (uint64_t)i);
++			hakios_say_verdict(h, "unreadable: extent ", (uint64_t)i, "");
++			return 0;
++		}
++		if (memcmp(g, e->guard, 16) != 0) {
++			print("hakios: %s: extent %d (the volume's blocks from %d, at %s's %d) does not hold what it held in"
++			    " Android: its first block sums to %x there and %x in the map, its last to %x and %x. The blocks"
++			    " have moved: nothing is served\n", h->name, (uint64_t)i, e->lblk, HAKIOS_BACKING, e->pblk,
++			    hakios_get64(g), hakios_get64(e->guard), hakios_get64(g + 8), hakios_get64(e->guard + 8));
++			hakios_say_verdict(h, "moved: extent ", (uint64_t)i, " is not what the map says");
++			return 0;
++		}
++	}
++	return 1;
++}
++
++/*
++ * Is the volume where its map says it is: the marker in its first block (unless the map says read only), and
++ * every extent at its guard. 0 when it is not, or the map is not whole -- having said which.
++ */
++static int
++hakios_whole(struct hakios_volume *h)
++{
++	unsigned i;
++	int named = 0, held;
++
++	for (i = 0; i < sizeof(h->marker); i++) {
++		named |= h->marker[i] != 0;
++	}
++	if (!named && !h->readonly) {
++		print("hakios: %s: the map names no marker: nothing is served from it\n", h->name);
++		hakios_say_verdict(h, "no marker in the map", NO_NUMBER, "");
++		return 0;
++	}
++	if (named) {
++		held = hakios_marker_ok(h);
++		if (held < 0) {
++			hakios_say_verdict(h, "its first block could not be read", NO_NUMBER, "");
++			return 0;
++		}
++		if (held == 0) {
++			hakios_say_verdict(h, "its first block does not hold the marker", NO_NUMBER, "");
++			return 0;
++		}
++	}
++	return hakios_guards_hold(h);
++}
++
++/*
++ * The volume for this run, against userdata as UEFI lists it now (block_start): 1 only when the map is whole and
++ * the volume is where it says -- *writable then says whether this run may write it: the data volume's, with
++ * hakios_data=1 -- and 0 otherwise: nothing is served from a map that is not the volume's now, not even a read.
++ */
++static int
++hakios_offer(struct hakios_volume *h, int *writable)
++{
++	efi_block_io *bio = partition_bio(HAKIOS_BACKING);
++
++	*writable = 0;
++	if (!h->loaded) {
++		hakios_say_verdict(h, "no map", NO_NUMBER, "");
++		return 0;
++	}
++	if (bio == NULL || !hakios_fits(h, bio)) {
++		print("hakios: %s: not served this run: the map does not fit %s as UEFI lists it\n", h->name, HAKIOS_BACKING);
++		hakios_say_verdict(h, "does not fit userdata as UEFI lists it", NO_NUMBER, "");
++		return 0;
++	}
++	h->bio = bio;
++	if (!h->verified && !hakios_whole(h)) {
++		return 0;
++	}
++	h->verified = 1;
++	print("hakios: %s: %d extents, %d blocks (%d MiB) on %s; whole, where the map says: %s; %s\n", h->name,
++	    (uint64_t)h->n_ext, h->blocks, h->blocks * 4096 >> 20, HAKIOS_BACKING,
++	    h->readonly ? "every extent at its guard" : "the marker in its first block, every extent at its guard",
++	    (h == hakios + HAKIOS_DATA && hakios_data_requested) ?
++	    "it takes writes this run, all of it, and everything else stays read only" : "read only this run");
++	hakios_say_verdict(h, "whole: ", (uint64_t)h->n_ext, " extents where the map says");
++	*writable = h == hakios + HAKIOS_DATA && hakios_data_requested;
++	return 1;
++}
++
++/* the extent the volume's block lba is in (the extents cover the volume without a gap) */
++static uint32_t
++hakios_extent_of(struct hakios_volume *h, uint64_t lba)
++{
++	uint32_t lo = 0, hi = h->n_ext - 1;
++
++	while (lo < hi) {
++		uint32_t mid = (lo + hi) / 2;
++
++		if (lba < h->ext[mid].lblk + h->ext[mid].n) {
++			hi = mid;
++		} else {
++			lo = mid + 1;
++		}
++	}
++	return lo;
++}
++
++/*
++ * One request to the volume, block_poll's contract: [lba, lba + count) read into block_buffer, or written from it,
++ * the same way as a write of darwin's -- WRITE_FAST written and nothing more, WRITE flushed and read back and
++ * compared, piece by piece. *bytes says what was moved.
++ */
++static efi_status
++hakios_serve(struct hakios_volume *h, uint64_t lba, uint64_t count, uint32_t op, uint64_t *bytes)
++{
++	efi_block_io *bio = h->bio;
++	uint64_t media = bio->media->media_id, done = 0;
++	uint32_t e = hakios_extent_of(h, lba);
++	efi_status s = 0;
++
++	*bytes = 0;
++	while (count != 0) {
++		/* n blocks of this extent are asked for: the partition's blocks pblk on */
++		uint64_t in = h->ext[e].lblk + h->ext[e].n - lba, n = count < in ? count : in;
++		uint64_t pblk = h->ext[e].pblk + (lba - h->ext[e].lblk), len = n * 4096;
++		uint8_t *buf = block_buffer + done;
++		uint64_t at = (uint64_t)(uintptr_t)buf;
++
++		if (op == BLOCK_OP_READ) {
++			s = bio->read_blocks(bio, media, pblk, len, buf);
++			/* what the controller wrote is in memory; drop whatever this core held of it */
++			flush_dcache(at, at + len);
++		} else if (op == BLOCK_OP_WRITE_FAST) {
++			/* the kernel filled the buffer and cleaned its lines of it: drop whatever this core holds, write */
++			flush_dcache(at, at + len);
++			s = bio->write_blocks(bio, media, pblk, len, buf);
++		} else {
++			/* write, flush, read back into the same place, compare: the answer says the blocks hold what the
++			 * kernel gave, or the write is no good (the kernel does not need the buffer back) */
++			uint32_t want;
++
++			flush_dcache(at, at + len);
++			want = ufs_crc32(buf, len);
++			s = bio->write_blocks(bio, media, pblk, len, buf);
++			if (!EFI_ERROR(s)) {
++				bio->flush_blocks(bio);
++				s = bio->read_blocks(bio, media, pblk, len, buf);
++				flush_dcache(at, at + len);
++				if (!EFI_ERROR(s) && ufs_crc32(buf, len) != want) {
++					print("hakios: %s: blocks %d..%d read back DIFFERENT\n", h->name, lba, lba + n - 1);
++					s = 0x800000000000000AULL;      /* EFI_VOLUME_CORRUPTED */
++				}
++			}
++		}
++		if (EFI_ERROR(s)) {
++			return s;
++		}
++		done += len, lba += n, count -= n, e++;
++	}
++	*bytes = done;
++	return 0;
++}
++
++/*
++ * COUNT blocks of the volume from LBA on, read through its map straight into DST -- RAM, not the block buffer:
++ * what goes into the resident area is the system image, and the kernel is to find it there. The destination is
++ * dropped out of this core's cache before the controller writes it (it may hold lines of an older image) and
++ * again after (none are to be left over the controller's bytes). 0 when it could not be read whole.
+  */
+ static int
+-block_is_darwin(const efi_partition_info *info, const efi_block_io *bio, const struct loader_block_part *bp)
++hakios_read_to(struct hakios_volume *h, uint64_t lba, uint64_t count, uint8_t *dst)
+ {
+-	static const efi_guid type = BLOCK_DARWIN_TYPE;
+-	const uint8_t *u = (const uint8_t *)&info->unique_guid;
+-	static const char name[] = "darwin";
+-	const char *why = NULL;
++	uint64_t media = h->bio->media->media_id, done = 0;
++	uint32_t e = hakios_extent_of(h, lba);
+ 
+-	for (unsigned i = 0; i < sizeof(name); i++) {
+-		if (bp->name[i] != name[i]) {
+-			return 0;               /* another partition: nothing to say about it */
++	while (count != 0) {
++		uint64_t in = h->ext[e].lblk + h->ext[e].n - lba, n = count < in ? count : in;
++		uint64_t pblk = h->ext[e].pblk + (lba - h->ext[e].lblk), len = n * 4096;
++		uint64_t at = (uint64_t)(uintptr_t)dst + done;
++
++		flush_dcache(at, at + len);
++		if (EFI_ERROR(h->bio->read_blocks(h->bio, media, pblk, len, dst + done))) {
++			return 0;
+ 		}
++		flush_dcache(at, at + len);
++		done += len, lba += n, count -= n, e++;
+ 	}
+-	if (memcmp(&info->type_guid, &type, sizeof(type)) != 0) {
+-		why = "its type GUID is not the one it had";
+-	} else if (bp->unit != 0) {
+-		/* the first unit UEFI lists: this firmware's device paths say no logical unit number
+-		 * (device_path_print finds no 3.19 node), so bp->lun is 0xff for every unit */
+-		why = "it is not on the first logical unit";
+-	} else if (bp->block_size != 4096 || bp->blocks < BLOCK_DARWIN_MIN ||
+-	    info->end_lba - info->start_lba + 1 != bp->blocks) {
+-		why = "it is not 20 GiB in blocks of 4096";
+-	} else if (bio->media->read_only) {
+-		why = "UEFI gives it out read only";
+-	}
+-	if (why != NULL) {
+-		print("ufs: darwin: no write will be served: %s\n", why);
+-		return 0;
+-	}
+-	print("ufs: darwin (LBA %d..%d of unit 0, unique GUID %x...%x): its blocks from %d on may be written this run\n",
+-	    info->start_lba, info->end_lba, (uint64_t)u[3] << 24 | (uint64_t)u[2] << 16 | (uint64_t)u[1] << 8 | u[0],
+-	    (uint64_t)u[12] << 24 | (uint64_t)u[13] << 16 | (uint64_t)u[14] << 8 | u[15], BLOCK_WRITE_FIRST);
+ 	return 1;
+ }
+ 
+@@ -1990,6 +2832,39 @@ block_start(void)
+ 		}
+ 	}
+ 	BS->free_pool(handles);
++	/*
++	 * The volumes mapped in Android's userdata, for each of which the host has sent its map: after the partitions
++	 * and before the units. Published only when the map is whole and the volume is where it says (hakios_offer);
++	 * the data volume for writing with hakios_data=1, the system image never.
++	 */
++	block_write_first = BLOCK_WRITE_FIRST;
++	for (int v = 0; v < HAKIOS_VOLUMES; v++) {
++		struct hakios_volume *h = &hakios[v];
++		int writable = 0;
++
++		if (h->loaded && block_shared.parts + nunits < BLOCK_MAX_PARTS && hakios_offer(h, &writable)) {
++			struct loader_block_part *bp = &block_shared.part[block_shared.parts];
++			unsigned i;
++
++			for (i = 0; i + 1 < sizeof(bp->name) && h->name[i] != 0; i++) {
++				bp->name[i] = h->name[i];
++			}
++			bp->name[i] = 0;
++			bp->block_size = 4096;
++			bp->blocks = h->blocks;
++			bp->start_lba = 0;         /* not one place: the map says, block by block */
++			bp->unit = 0xffff;
++			bp->lun = 0xff;
++			bp->flags = BLOCK_PART_EXTENTS;
++			block_part_volume[block_shared.parts] = (int8_t)v;
++			block_bios[block_shared.parts] = h->bio;
++			if (writable && block_write_part < 0) {
++				block_write_part = (int)block_shared.parts;
++				block_write_first = 0;
++			}
++			block_shared.parts++;
++		}
++	}
+ 	for (uint64_t u = 0; u < nunits; u++) {
+ 		struct loader_block_part *bp = &block_shared.part[block_shared.parts];
+ 		char *n = bp->name;
+@@ -2030,7 +2905,7 @@ block_start(void)
+ 	block_writes = block_writes_refused = block_write_bytes = 0;
+ 	if (block_write_part >= 0) {
+ 		block_shared.write_part_plus_one = (uint32_t)block_write_part + 1;
+-		block_shared.write_first = BLOCK_WRITE_FIRST;
++		block_shared.write_first = block_write_first;
+ 		block_shared.write_caps = BLOCK_CAN_FAST;
+ 	}
+ 	block_shared.magic = BLOCK_MAGIC;
+@@ -2148,6 +3023,8 @@ block_poll(void)
+ 	if (part < block_shared.parts && count != 0 && count <= BLOCK_BUFFER_SIZE / block_shared.part[part].block_size &&
+ 	    lba < block_shared.part[part].blocks && count <= block_shared.part[part].blocks - lba) {
+ 		efi_block_io *bio = block_bios[part];
++		int mapped = (block_shared.part[part].flags & BLOCK_PART_EXTENTS) != 0;
++		int writing = op == BLOCK_OP_WRITE || op == BLOCK_OP_WRITE_FAST || op == BLOCK_OP_FLUSH;
+ 
+ 		bytes = count * block_shared.part[part].block_size;
+ 		if (!hc_list_is_uefis()) {
+@@ -2157,54 +3034,58 @@ block_poll(void)
+ 			}
+ 			s = 0x800000000000000FULL;      /* EFI_ACCESS_DENIED */
+ 			bytes = 0;
+-		} else if (op == BLOCK_OP_WRITE || op == BLOCK_OP_WRITE_FAST || op == BLOCK_OP_FLUSH) {
+-			if (block_write_part < 0 || part != (uint32_t)block_write_part || lba < BLOCK_WRITE_FIRST) {
+-				/* not darwin, or not past what the build writes from the computer: never */
+-				if (block_writes_refused++ < 8) {
+-					print("ufs: a write of %d blocks from %d of %s: REFUSED\n", count, lba,
++		} else if (writing && (block_write_part < 0 || part != (uint32_t)block_write_part || lba < block_write_first)) {
++			/* not the one partition a write may reach, or not from where in it: never */
++			if (block_writes_refused++ < 8) {
++				print("ufs: a write of %d blocks from %d of %s: REFUSED\n", count, lba,
++				    block_shared.part[part].name);
++			}
++			s = 0x800000000000000FULL;      /* EFI_ACCESS_DENIED */
++			bytes = 0;
++		} else if (op == BLOCK_OP_FLUSH) {
++			/* the write partition's cache to the flash (the file system's journal asks); one block in bounds */
++			s = bio->flush_blocks(bio);
++			bytes = 0;
++		} else if (mapped) {
++			/* a volume in Android's userdata (hakios_data, hakios_system): extent by extent, the map's blocks */
++			s = hakios_serve(&hakios[block_part_volume[part]], lba, count, op, &bytes);
++			if (!EFI_ERROR(s) && writing) {
++				block_writes++;
++				block_write_bytes += bytes;
++			}
++		} else if (op == BLOCK_OP_WRITE_FAST) {
++			/* written and nothing more: the data volume's journal asks for the flush where the order matters */
++			flush_dcache((uint64_t)(uintptr_t)block_buffer, (uint64_t)(uintptr_t)block_buffer + bytes);
++			s = bio->write_blocks(bio, bio->media->media_id, lba, bytes, block_buffer);
++			if (!EFI_ERROR(s)) {
++				block_writes++;
++				block_write_bytes += bytes;
++			}
++		} else if (op == BLOCK_OP_WRITE) {
++			/*
++			 * The kernel filled the buffer and cleaned its lines of it; drop whatever this
++			 * core holds, write, and read back -- the answer says the blocks hold what the
++			 * kernel gave, or the write is no good. The read back overwrites the buffer,
++			 * which the kernel does not need: it has the data.
++			 */
++			uint32_t want;
++
++			flush_dcache((uint64_t)(uintptr_t)block_buffer, (uint64_t)(uintptr_t)block_buffer + bytes);
++			want = ufs_crc32(block_buffer, bytes);
++			s = bio->write_blocks(bio, bio->media->media_id, lba, bytes, block_buffer);
++			if (!EFI_ERROR(s)) {
++				bio->flush_blocks(bio);
++				s = bio->read_blocks(bio, bio->media->media_id, lba, bytes, block_buffer);
++				flush_dcache((uint64_t)(uintptr_t)block_buffer, (uint64_t)(uintptr_t)block_buffer + bytes);
++				if (!EFI_ERROR(s) && ufs_crc32(block_buffer, bytes) != want) {
++					print("ufs: %d blocks from %d of %s read back DIFFERENT\n", count, lba,
+ 					    block_shared.part[part].name);
++					s = 0x800000000000000AULL;      /* EFI_VOLUME_CORRUPTED */
+ 				}
+-				s = 0x800000000000000FULL;      /* EFI_ACCESS_DENIED */
+-				bytes = 0;
+-			} else if (op == BLOCK_OP_FLUSH) {
+-				s = bio->flush_blocks(bio);
+-				bytes = 0;
+-			} else if (op == BLOCK_OP_WRITE_FAST) {
+-				flush_dcache((uint64_t)(uintptr_t)block_buffer,
+-				    (uint64_t)(uintptr_t)block_buffer + bytes);
+-				s = bio->write_blocks(bio, bio->media->media_id, lba, bytes, block_buffer);
+-				if (!EFI_ERROR(s)) {
+-					block_writes++;
+-					block_write_bytes += bytes;
+-				}
+-			} else {
+-				/*
+-				 * The kernel filled the buffer and cleaned its lines of it; drop whatever this
+-				 * core holds, write, and read back -- the answer says the blocks hold what the
+-				 * kernel gave, or the write is no good. The read back overwrites the buffer,
+-				 * which the kernel does not need: it has the data.
+-				 */
+-				uint32_t want;
+-
+-				flush_dcache((uint64_t)(uintptr_t)block_buffer,
+-				    (uint64_t)(uintptr_t)block_buffer + bytes);
+-				want = ufs_crc32(block_buffer, bytes);
+-				s = bio->write_blocks(bio, bio->media->media_id, lba, bytes, block_buffer);
+-				if (!EFI_ERROR(s)) {
+-					bio->flush_blocks(bio);
+-					s = bio->read_blocks(bio, bio->media->media_id, lba, bytes, block_buffer);
+-					flush_dcache((uint64_t)(uintptr_t)block_buffer,
+-					    (uint64_t)(uintptr_t)block_buffer + bytes);
+-					if (!EFI_ERROR(s) && ufs_crc32(block_buffer, bytes) != want) {
+-						print("ufs: %d blocks from %d of darwin read back DIFFERENT\n",
+-						    count, lba);
+-						s = 0x800000000000000AULL;      /* EFI_VOLUME_CORRUPTED */
+-					}
+-				}
+-				if (!EFI_ERROR(s)) {
+-					block_writes++;
+-					block_write_bytes += bytes;
+-				}
++			}
++			if (!EFI_ERROR(s)) {
++				block_writes++;
++				block_write_bytes += bytes;
+ 			}
+ 		} else if (op == BLOCK_OP_READ) {
+ 			s = bio->read_blocks(bio, bio->media->media_id, lba, bytes, block_buffer);
+@@ -2352,13 +3233,18 @@ run_on_other_cpu(uint64_t mpidr, uint64_t entry, uint64_t boot_args_pa, const st
  		 * what the kernel is seen to do goes there as it happens. That needs UEFI's services,
  		 * so until NOTE_SECONDS are over this core keeps its interrupts.
  		 */
@@ -17452,7 +18648,7 @@ index 422f9d3..acd04b3 100644
  				}
  				flush_log();
  			}
-@@ -2451,7 +2653,7 @@ run_on_other_cpu(uint64_t mpidr, uint64_t entry, uint64_t boot_args_pa, const st
+@@ -2451,7 +3337,7 @@ run_on_other_cpu(uint64_t mpidr, uint64_t entry, uint64_t boot_args_pa, const st
  #define VIRT_WDT_STATUS    0x86000006u
  #define VIRT_WDT_PET       0x86000007u
  #define VIRT_WDT_SET_TIME  0x86000008u
@@ -17461,7 +18657,7 @@ index 422f9d3..acd04b3 100644
  
  static const struct platform *PLAT;
  static int wdt_armed;
-@@ -2503,7 +2705,7 @@ wdt_arm(void)
+@@ -2503,7 +3389,7 @@ wdt_arm(void)
  {
  	uint64_t ctl = 0, since = 0;
  
@@ -17470,7 +18666,7 @@ index 422f9d3..acd04b3 100644
  		return; /* SMC is not routed anywhere useful on QEMU virt */
  	}
  	uint64_t st = smc_call(VIRT_WDT_STATUS, 0, 0, &ctl, &since);
-@@ -2709,6 +2911,70 @@ static struct {
+@@ -2709,6 +3595,70 @@ static struct {
  } SCREEN;
  static uint64_t win_base, win_size; /* XNU's physical memory window, claimed once */
  static uint64_t resident_rd_size;   /* root image kept at win_base + RESIDENT_RD_OFFSET, 0 if none */
@@ -17541,7 +18737,7 @@ index 422f9d3..acd04b3 100644
  static char last_result[64] = "idle";
  
  static void
-@@ -2767,6 +3033,11 @@ choose_window(const struct payload_info *pi)
+@@ -2767,6 +3717,11 @@ choose_window(const struct payload_info *pi)
  	uint64_t best_base = 0, best_size = 0;
  	uint64_t pay_lo = PAYLOAD_BASE, pay_hi = PAYLOAD_BASE + PAYLOAD_MAX_SIZE;
  
@@ -17553,7 +18749,7 @@ index 422f9d3..acd04b3 100644
  	if (win_size != 0) {
  		return 1;
  	}
-@@ -2993,6 +3264,9 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -2993,6 +3948,9 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  
  	/* "bootcpu=N" among the kernel's arguments: run it on core N (see run_on_other_cpu) */
  	uint64_t this_mpidr = READ_SYSREG(MPIDR_EL1) & 0xFFFFFF, kernel_mpidr = this_mpidr;
@@ -17563,15 +18759,16 @@ index 422f9d3..acd04b3 100644
  	/* "cpus=N" or "cpumask=M" there too: the kernel may have more cores than the one it starts on */
  	int more_cores = 0, battery_requested = 0, ufs_requested = 0;
  	/* "torch=N" (not 0) there too: the phone's flashlight is the kernel's (drivers/camera/hakios.torch.c) */
-@@ -3005,6 +3279,7 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3005,6 +3963,8 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  	 * loader asked for (the loader stays resident across runs) */
  	block_write_requested = 0;
  	block_write_part = -1;
++	hakios_data_requested = 0;
 +	returned_klog = NULL;                /* this run makes its own log where the last one's lay */
  	/*
  	 * the same for the other storage requests (they are only ever OR-ed in below): without this a run
  	 * that did not ask for ufs=2 is still offered a stale page and given its ufs_shared_pa
-@@ -3012,9 +3287,32 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3012,9 +3972,32 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  	hc_requested = 0;
  	block_probe_requested = 0;
  	block_enabled = 0;
@@ -17605,7 +18802,12 @@ index 422f9d3..acd04b3 100644
  		}
  		more_cores |= (starts_with(c, "cpus=") || starts_with(c, "cpumask=")) && (c == pi.cmdline || c[-1] == ' ');
  		battery_requested |= starts_with(c, "battery=1") && (c == pi.cmdline || c[-1] == ' ') &&
-@@ -3032,6 +3330,11 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3029,9 +4012,16 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+ 		block_probe_requested |= starts_with(c, "ufs_probe=1") && (c == pi.cmdline || c[-1] == ' ');
+ 		block_write_requested |= starts_with(c, "ufs_write=1") && (c == pi.cmdline || c[-1] == ' ') &&
+ 		    (c[11] == 0 || c[11] == ' ');
++		hakios_data_requested |= starts_with(c, "hakios_data=1") && (c == pi.cmdline || c[-1] == ' ') &&
++		    (c[13] == 0 || c[13] == ' ');
  		hc_requested |= starts_with(c, "ufs_native=") && (c == pi.cmdline || c[-1] == ' ') && c[11] >= '1' &&
  		    c[11] <= '9';
  	}
@@ -17617,7 +18819,7 @@ index 422f9d3..acd04b3 100644
  	if (battery_requested) {
  		charger_start();
  	}
-@@ -3078,6 +3381,24 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3078,6 +4068,24 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  		}
  	}
  
@@ -17642,7 +18844,7 @@ index 422f9d3..acd04b3 100644
  	/* --- boot_args ------------------------------------------------------ */
  	struct boot_args *ba = (struct boot_args *)ba_pa;
  	memset(ba, 0, sizeof(*ba));
-@@ -3146,6 +3467,21 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3146,6 +4154,21 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  			ba->commandLine[n++] = *c;
  		}
  	}
@@ -17664,7 +18866,7 @@ index 422f9d3..acd04b3 100644
  	if (block_enabled) {
  		static const char prefix[] = "ufs_shared_pa=0x";
  		static const char hex[] = "0123456789abcdef";
-@@ -3172,6 +3508,30 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3172,6 +4195,30 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  		}
  		if (n < BOOT_LINE_LENGTH - 1) ba->commandLine[n++] = ' ';
  	}
@@ -17695,7 +18897,7 @@ index 422f9d3..acd04b3 100644
  	/* the version of this kernel, for sysctl kern.hakios.version and the kernel's log (no spaces in it) */
  	if (pi.kernel_version != NULL && pi.kernel_version[0] != 0) {
  		static const char prefix[] = "hakios_kver=";
-@@ -3239,6 +3599,18 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3239,6 +4286,18 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  	dt_prop_u64(&w, "dram-base", phys_base);
  	dt_prop_u64(&w, "dram-size", win_size);
  	dt_prop_u32(&w, "debug-enabled", 1);
@@ -17714,7 +18916,7 @@ index 422f9d3..acd04b3 100644
  	/* what MobileGestalt answers "main screen scale" from: 3 device pixels per point */
  	dt_prop_u32(&w, "display-scale", 3);
  	dt_prop_u32(&w, "display-rotation", 0);
-@@ -3361,13 +3733,13 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3361,13 +4420,13 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  	 * this loader stays on while it watches is not the kernel's, nor any the firmware runs.
  	 */
  	uint64_t cpu_mpidr[8] = { kernel_mpidr };
@@ -17730,7 +18932,7 @@ index 422f9d3..acd04b3 100644
  				int64_t state;
  
  				if (core < 0 || core >= plat->cores || mpidr == this_mpidr) {
-@@ -3428,7 +3800,8 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3428,7 +4487,8 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  	dt_begin(&w, "gic");
  	dt_prop_str(&w, "device_type", "interrupt-controller");
  	dt_prop_str(&w, "compatible", "arm,gic-v3");
@@ -17740,7 +18942,7 @@ index 422f9d3..acd04b3 100644
  	dt_prop(&w, "reg", gic_reg, sizeof(gic_reg));
  	dt_end(&w);
  	if (plat->uart != 0) {
-@@ -3507,7 +3880,9 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3507,7 +4567,9 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  				print("THE KERNEL HUNG on core %x: no sign of life for %d seconds; its log follows\n", kernel_mpidr,
  				    (uint64_t)SILENCE_SECONDS);
  				set_result("hung", loader_ctx[CTX_LOG_LEN], 0);
@@ -17751,7 +18953,7 @@ index 422f9d3..acd04b3 100644
  				return 1;
  			} else if (status != 0) {
  				/* the kernel was told it would be on that core (return path, device tree): no second try */
-@@ -3594,6 +3969,8 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
+@@ -3594,6 +4656,8 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
  			set_result("returned", klog_len, 0);
  		}
  	}
@@ -17760,7 +18962,7 @@ index 422f9d3..acd04b3 100644
  	write_logs(klog, klog_len);
  	return 1;
  }
-@@ -3802,6 +4179,28 @@ starts_with(const char *s, const char *prefix)
+@@ -3802,6 +4866,98 @@ starts_with(const char *s, const char *prefix)
   * One command from the host. While a kernel runs on another core (running_live) only what does
   * not disturb it: questions, the screen, the log so far, and "oem stop".
   */
@@ -17786,10 +18988,92 @@ index 422f9d3..acd04b3 100644
 +static int op13_wifi_transfer_prepare(void);
 +static int download_to_wmi;
 +
++/*
++ * The block device of the GPT partition of an ASCII name ("userdata"): the walk find_log_partition() makes, for
++ * any name, for the commands that only read. NULL when no partition has the name -- or when more than one does,
++ * for choosing between two would be a guess about someone else's data.
++ */
++static efi_block_io *
++partition_bio(const char *name)
++{
++	static const efi_guid part_guid = EFI_PARTITION_INFO_GUID;
++	static const efi_guid blk_guid = EFI_BLOCK_IO_GUID;
++	efi_handle *handles;
++	uint64_t count;
++	efi_block_io *found = NULL;
++	uint32_t seen = 0;
++
++	if (EFI_ERROR(BS->locate_handle_buffer(ByProtocol, &part_guid, NULL, &count, &handles))) {
++		return NULL;
++	}
++	for (uint64_t i = 0; i < count; i++) {
++		efi_partition_info *info;
++		efi_block_io *bio;
++		unsigned k = 0;
++
++		if (EFI_ERROR(BS->handle_protocol(handles[i], &part_guid, (void **)&info)) || info->type != 2) {
++			continue;
++		}
++		for (; name[k] != 0 && (unsigned char)name[k] < 0x80 && (char16)(unsigned char)name[k] == info->name[k]; k++) {
++		}
++		if (name[k] == 0 && info->name[k] == 0 &&
++		    !EFI_ERROR(BS->handle_protocol(handles[i], &blk_guid, (void **)&bio))) {
++			found = bio;
++			seen++;
++		}
++	}
++	BS->free_pool(handles);
++	if (seen > 1) {
++		print("ufs: %d partitions are named %s: refusing to choose between them\n", (uint64_t)seen, name);
++		return NULL;
++	}
++	return found;
++}
++
++/* "getvar hakios-map" / "hakios-sysmap": what there is of a volume's map, in the few words a reply holds */
++static const char *
++hakios_status(struct hakios_volume *h, char out[64])
++{
++	char *p = out, tmp[24];
++	uint64_t v;
++	int i;
++
++	if (!h->loaded) {
++		return "none";
++	}
++	for (v = h->n_ext, i = 0; v; v /= 10) {
++		tmp[i++] = (char)('0' + v % 10);
++	}
++	while (i) {
++		*p++ = tmp[--i];
++	}
++	memcpy(p, " extents, ", 10), p += 9;
++	for (v = h->blocks, i = 0; v; v /= 10) {
++		tmp[i++] = (char)('0' + v % 10);
++	}
++	while (i) {
++		*p++ = tmp[--i];
++	}
++	memcpy(p, " blocks", 8);
++	return out;
++}
++
  static void
  fb_command(char *cmd)
  {
-@@ -3819,6 +4218,131 @@ fb_command(char *cmd)
+@@ -3811,7 +4967,10 @@ fb_command(char *cmd)
+ 	{
+ 		if (busy && (starts_with(cmd, "oem ramdisk") || starts_with(cmd, "download:") || starts_with(cmd, "oem run") ||
+ 		    starts_with(cmd, "oem selftest") || starts_with(cmd, "oem hang") || starts_with(cmd, "oem recording") ||
+-		    starts_with(cmd, "oem sound") || starts_with(cmd, "oem clearscreen") || starts_with(cmd, "oem memmap"))) {
++		    starts_with(cmd, "oem sound") || starts_with(cmd, "oem clearscreen") || starts_with(cmd, "oem memmap") ||
++		    starts_with(cmd, "oem ufs-survey") || starts_with(cmd, "oem ufs-read") ||
++		    starts_with(cmd, "oem hakios-map") || starts_with(cmd, "oem hakios-sysmap") ||
++		    starts_with(cmd, "oem hakios-resident"))) {
+ 			fb_reply("FAIL", "a kernel is running (oem stop ends it)");
+ 		} else if (starts_with(cmd, "oem stop")) {
+ 			/* the kernel looks at this once a second and comes back as it does when its time is up */
+@@ -3819,10 +4978,147 @@ fb_command(char *cmd)
  				((struct kernel_live *)(uintptr_t)running_live)->stop = 1;
  			}
  			fb_reply("OKAY", "");
@@ -17921,7 +19205,38 @@ index 422f9d3..acd04b3 100644
  		} else if (starts_with(cmd, "getvar:")) {
  			const char *var = cmd + 7;
  			if (str_eq(var, "product")) {
-@@ -3873,6 +4397,7 @@ fb_command(char *cmd)
+ 				fb_reply("OKAY", "xnuloader");
++			} else if (str_eq(var, "hakios-map")) {
++				char line[64];
++
++				fb_reply("OKAY", hakios_status(&hakios[HAKIOS_DATA], line));
++			} else if (str_eq(var, "hakios-volume")) {
++				fb_reply("OKAY", hakios[HAKIOS_DATA].verdict);
++			} else if (str_eq(var, "hakios-sysmap")) {
++				char line[64];
++
++				fb_reply("OKAY", hakios_status(&hakios[HAKIOS_SYSTEM], line));
++			} else if (str_eq(var, "hakios-system")) {
++				fb_reply("OKAY", hakios[HAKIOS_SYSTEM].verdict);
+ 			} else if (str_eq(var, "version")) {
+ 				fb_reply("OKAY", "0.5");
+ 			} else if (str_eq(var, "max-download-size")) {
+@@ -3863,8 +5159,14 @@ fb_command(char *cmd)
+ 			uint64_t limit = PAYLOAD_MAX_SIZE - 0x100000;
+ 			uint8_t *dest = (uint8_t *)PAYLOAD_BASE;
+ 			int to_ramdisk = download_to_ramdisk;
++			int to_hakios = download_to_hakios;      /* "oem hakios-map" / "oem hakios-sysmap": -1, or the volume whose map comes */
+ 
+ 			download_to_ramdisk = 0;
++			download_to_hakios = -1;
++			if (to_hakios >= 0) {
++				limit = sizeof(hakios_text[0]) - 1;
++				dest = (uint8_t *)hakios_text[to_hakios];
++			}
+ 			if (to_ramdisk) {
+ 				limit = win_size - RESIDENT_RD_OFFSET - RESIDENT_RD_RESERVE;
+ 				/* the answer to "download:" carries the size in 32 bits: a larger one would be answered as another size */
+@@ -3873,6 +5175,7 @@ fb_command(char *cmd)
  				}
  				dest = (uint8_t *)(win_base + RESIDENT_RD_OFFSET);
  				resident_rd_size = 0;
@@ -17929,10 +19244,223 @@ index 422f9d3..acd04b3 100644
  			}
  			if (total == 0 || total > limit) {
  				fb_reply("FAIL", "bad size");
-@@ -3988,11 +4513,40 @@ fb_command(char *cmd)
+@@ -3883,7 +5186,7 @@ fb_command(char *cmd)
+ 			 * is taken out when it arrives and put back at the end, so that a transfer that stops half-way
+ 			 * leaves something "oem run" refuses, not a mix of the new and the old.
+ 			 */
+-			if (!to_ramdisk) {
++			if (!to_ramdisk && to_hakios < 0) {
+ 				*(volatile uint32_t *)dest = 0;
+ 			}
+ 			uint32_t magic_held = 0;
+@@ -3901,7 +5204,7 @@ fb_command(char *cmd)
+ 					r = (int64_t)want;
+ 				}
+ 				memcpy(dest + got, usb_rx_buf, (size_t)r);
+-				if (!to_ramdisk && !magic_taken && got + (uint64_t)r >= 4) {
++				if (!to_ramdisk && to_hakios < 0 && !magic_taken && got + (uint64_t)r >= 4) {
+ 					magic_held = *(volatile uint32_t *)dest;
+ 					*(volatile uint32_t *)dest = 0;
+ 					magic_taken = 1;
+@@ -3916,7 +5219,16 @@ fb_command(char *cmd)
+ 				if (to_ramdisk) {
+ 					resident_rd_size = total;
+ 				}
+-				fb_reply("OKAY", "");
++				if (to_hakios >= 0) {
++					/* the last line may have no newline of its own: the text ends here */
++					hakios_text[to_hakios][total] = 0;
++					if (hakios_map_parse(&hakios[to_hakios]) != 0) {
++						fb_reply("FAIL", "map refused: oem log says why");
++						return;
++					}
++				}
++				fb_reply("OKAY", to_hakios == HAKIOS_DATA ? "the map is taken; oem run with hakios_data=1" :
++				    to_hakios == HAKIOS_SYSTEM ? "the map is taken; oem hakios-resident reads the image" : "");
+ 			} else {
+ 				fb_reply("FAIL", "short download");
+ 			}
+@@ -3988,11 +5300,217 @@ fb_command(char *cmd)
  			/* the firmware's memory map into the log (then "oem log" and fetch it) */
  			print_memory_map();
  			fb_reply("OKAY", "");
++		} else if (starts_with(cmd, "oem ufs-survey")) {
++			/*
++			 * The storage survey alone (ufs_survey, above): the units, GPT partitions and their CRCs,
++			 * super's geometry and userdata's start -- read only, no kernel started
++			 * (docs/data-persistence.md, Phase 0). It goes into the log, and "oem log-part" fetches it. Refused while a kernel
++			 * runs (the list at the top of fb_command): UEFI's block driver must not be asked behind
++			 * its back.
++			 */
++			log_len = 0;
++			ufs_survey();
++			fb_reply("OKAY", "surveyed; oem log-part");
++		} else if (str_eq(cmd, "oem hakios-map") || str_eq(cmd, "oem hakios-sysmap")) {
++			/*
++			 * The next "download:" is the map of a volume in Android's userdata (tools/hakios-data.py boot
++			 * sends it, made afresh from Android before the phone leaves it): checked as it comes, printed to
++			 * the log, and looked at again at every use (block_start, "oem hakios-resident"). It stays with this
++			 * loader across runs, like the resident image. "oem hakios-map": the data volume;
++			 * "oem hakios-sysmap": the system image.
++			 */
++			download_to_hakios = str_eq(cmd, "oem hakios-map") ? HAKIOS_DATA : HAKIOS_SYSTEM;
++			fb_reply("OKAY", "send the map");
++		} else if (str_eq(cmd, "oem hakios-info")) {
++			/* the maps, and whether the volumes are where they say (looked at again, now): into the log ("oem log"
++			 * fetches it), and in "getvar hakios-volume" and "getvar hakios-system" */
++			char line[64];
++			int writable, v;
++
++			for (v = 0; v < HAKIOS_VOLUMES; v++) {
++				print("hakios: the map of %s: %s\n", hakios[v].name, hakios_status(&hakios[v], line));
++				hakios_offer(&hakios[v], &writable);
++				print("hakios: %s: %s\n", hakios[v].name, hakios[v].verdict);
++			}
++			fb_reply("OKAY", "getvar hakios-volume, hakios-system say");
++		} else if (str_eq(cmd, "oem hakios-resident")) {
++			/*
++			 * The system image from the phone's own storage into the RAM disk's place: what "oem ramdisk" and an
++			 * upload of 2.4 GB over USB do otherwise. The system volume's blocks (hakios_system: its map sent with
++			 * "oem hakios-sysmap", looked at here as at a run) are read through UEFI's driver into the resident
++			 * area of the window; a run then takes them as md0 exactly as it takes an uploaded image.
++			 */
++			struct payload_info pi;
++			struct hakios_volume *h = &hakios[HAKIOS_SYSTEM];
++			uint64_t limit, done = 0, began, freq = READ_SYSREG(CNTFRQ_EL0);
++			int writable;
++			char said[64];
++
++			parse_payload(&pi, 0);
++			if (!choose_window(&pi) || win_size <= RESIDENT_RD_OFFSET + RESIDENT_RD_RESERVE) {
++				fb_reply("FAIL", "no memory window");
++				return;
++			}
++			limit = win_size - RESIDENT_RD_OFFSET - RESIDENT_RD_RESERVE;
++			if (!h->loaded) {
++				fb_reply("FAIL", "no map of the system image: oem hakios-sysmap");
++			} else if (!hakios_offer(h, &writable)) {
++				print("hakios: hakios-resident: %s\n", h->verdict);
++				fb_reply("FAIL", "the system image is not where its map says (oem hakios-info says why)");
++			} else if (h->bytes > limit) {
++				print("hakios: hakios-resident: %d bytes of image, %d bytes of room\n", h->bytes, limit);
++				fb_reply("FAIL", "no room for the system image");
++			} else {
++				resident_rd_size = 0;
++				began = READ_SYSREG(CNTVCT_EL0);
++				print("hakios: %s: %d MiB from the phone's storage into the RAM disk's place\n", h->name,
++				    h->blocks * 4096 >> 20);
++				while (done < h->blocks) {
++					uint64_t n = h->blocks - done < HAKIOS_RESIDENT_CHUNK ? h->blocks - done : HAKIOS_RESIDENT_CHUNK;
++
++					if (!hakios_read_to(h, done, n, (uint8_t *)(win_base + RESIDENT_RD_OFFSET) + done * 4096)) {
++						print("hakios: %s: block %d of the image could not be read: nothing is left resident\n",
++						    h->name, done);
++						fb_reply("FAIL", "the read failed: oem log says where");
++						return;
++					}
++					done += n;
++					wdt_pet();
++				}
++				resident_rd_size = h->bytes;
++				print("hakios: %s: %d bytes read in %d ms: the RAM disk's place holds the system image\n", h->name,
++				    h->bytes, (READ_SYSREG(CNTVCT_EL0) - began) * 1000 / freq);
++				hakios_say(said, "", h->bytes >> 20, " MiB read from hakios_system");
++				fb_reply("OKAY", said);
++			}
++				} else if (starts_with(cmd, "oem ufs-read")) {
++			/*
++			 * "oem ufs-read NAME LBA BLOCKS": BLOCKS blocks of the GPT partition NAME from its block LBA
++			 * on, put where "upload" (fastboot get_staged) takes what it sends. This is the storage as
++			 * UEFI's own block driver hands it out: neither what Android's kernel sees through the
++			 * device-mapper layers it puts over userdata, nor what the block service below publishes.
++			 * The one exception is a volume mapped in userdata, read here under the name the kernel
++			 * knows it by (hakios_data, hakios_system): then it goes the way the kernel's reads will go,
++			 * through the map and its guards -- the whole of that path tried before there is a kernel to ask.
++			 * Reads only, 16 blocks at most at a time. Refused while a kernel runs (the list at the
++			 * top of fb_command), as "oem ufs-survey" is.
++			 */
++			char name[40];
++			const char *a = cmd + sizeof("oem ufs-read") - 1;
++			uint64_t lba, blocks, bs;
++			efi_block_io *bio;
++			unsigned n = 0;
++
++			while (*a == ' ') {
++				a++;
++			}
++			for (; a[n] != 0 && a[n] != ' ' && n < sizeof(name) - 1; n++) {
++				name[n] = a[n];
++			}
++			name[n] = 0;
++			a += n;
++			while (*a == ' ') {
++				a++;
++			}
++			lba = parse_number(a, 10);
++			while (*a >= '0' && *a <= '9') {
++				a++;
++			}
++			while (*a == ' ') {
++				a++;
++			}
++			blocks = parse_number(a, 10);
++			bio = n == 0 ? NULL : partition_bio(name);
++			int v;
++
++			for (v = 0; v < HAKIOS_VOLUMES; v++) {
++				unsigned k;
++
++				for (k = 0; k < n && hakios[v].name[k] != 0 && name[k] == hakios[v].name[k]; k++) {
++				}
++				if (k == n && hakios[v].name[k] == 0) {
++					break;
++				}
++			}
++			if (v < HAKIOS_VOLUMES) {
++				/* a mapped volume (hakios_data, hakios_system): offered as at a run (the partition, the extents,
++				 * the marker, the guards), then read */
++				struct hakios_volume *h = &hakios[v];
++				uint64_t got = 0;
++				int writable;
++
++				bs = 4096;
++				if (!hakios_offer(h, &writable)) {
++					fb_reply("FAIL", "no volume where the map says (oem hakios-info says why)");
++				} else if (blocks == 0 || blocks > 16 || lba + blocks > h->blocks) {
++					fb_reply("FAIL", "1 to 16 blocks within the volume");
++				} else if (EFI_ERROR(hakios_serve(h, lba, blocks, BLOCK_OP_READ, &got))) {
++					print("ufs-read: %s lba %d: the read through the map failed\n", h->name, lba);
++					fb_reply("FAIL", "the read failed");
++				} else {
++					memcpy(out_buf, block_buffer, (size_t)got);
++					staged_data = out_buf;
++					staged_len = got;
++					staged_total = got;
++					staged_klog = 0;
++					print("ufs-read: %s (mapped, %d extents) lba %d, %d blocks of %d\n", h->name,
++					    (uint64_t)h->n_ext, lba, blocks, bs);
++					fb_reply("OKAY", "");
++				}
++			} else if (bio == NULL) {
++				print("ufs-read: no partition named %s\n", name);
++				fb_reply("FAIL", "no such partition");
++			} else {
++				bs = bio->media->block_size;
++				if (blocks == 0 || blocks > 16 || lba + blocks > bio->media->last_block + 1 || blocks * bs > 65536) {
++					print("ufs-read: %s lba %d, %d blocks: out of range (1 to 16 blocks)\n", name, lba, blocks);
++					fb_reply("FAIL", "1 to 16 blocks within the partition");
++				} else if (EFI_ERROR(bio->read_blocks(bio, bio->media->media_id, lba, blocks * bs, out_buf))) {
++					print("ufs-read: %s lba %d: the read failed\n", name, lba);
++					fb_reply("FAIL", "the read failed");
++				} else {
++					staged_data = out_buf;
++					staged_len = blocks * bs;
++					staged_total = staged_len;
++					staged_klog = 0;
++					print("ufs-read: %s lba %d, %d blocks of %d\n", name, lba, blocks, bs);
++					fb_reply("OKAY", "");
++				}
++			}
 +		} else if (starts_with(cmd, "oem log-part")) {
 +			/* one 16 KB slice of what "oem log" stages: the one-shot upload of the
 +			 * whole log has been seen to stop at 0x7fff bytes (host, UEFI, not yet
@@ -17971,7 +19499,7 @@ index 422f9d3..acd04b3 100644
  			}
  			fb_reply("OKAY", "");
  		} else if (starts_with(cmd, "reboot") || starts_with(cmd, "oem reboot")) {
-@@ -4319,6 +4873,19 @@ efi_main(efi_handle image, efi_system_table *st)
+@@ -4319,6 +5837,19 @@ efi_main(efi_handle image, efi_system_table *st)
  	IMAGE = image;
  
  	BS->set_watchdog_timer(0, 0, 0, NULL);
@@ -17991,7 +19519,7 @@ index 422f9d3..acd04b3 100644
  	/* no payload in memory (nobody put one there): the volume this loader came from may have one, as a UEFI boot loader's does */
  	if (((const struct payload_header *)PAYLOAD_BASE)->magic != PAYLOAD_MAGIC) {
  		load_payload_from_volume();
-@@ -4345,6 +4912,8 @@ efi_main(efi_handle image, efi_system_table *st)
+@@ -4345,6 +5876,8 @@ efi_main(efi_handle image, efi_system_table *st)
  		SCREEN.stride = GOP->mode->info->pixels_per_scanline * 4;
  		if (SCREEN.base == 0xE1000000ULL) {
  			PLAT = &platform_redwood;
@@ -18000,7 +19528,7 @@ index 422f9d3..acd04b3 100644
  		} else {
  			ramfb_phone_screen();
  		}
-@@ -4368,3 +4937,104 @@ efi_main(efi_handle image, efi_system_table *st)
+@@ -4368,3 +5901,105 @@ efi_main(efi_handle image, efi_system_table *st)
  	reboot();
  	return 0;
  }
@@ -18070,10 +19598,11 @@ index 422f9d3..acd04b3 100644
 +static int op13_wifi_smmu_step(int step)
 +{
 +    if (step == 7) {
-+        /* the staged firmware's first bytes (its whole MHI image is summed against the radio's set in
-+         * op13_wifi_mhi_prepare, which says which set it found) */
-+        volatile uint8_t *img = (volatile uint8_t *)op13_wifi_image();
++        /* check the staged firmware before the MHI runtime */
++        volatile uint8_t *img = (volatile uint8_t *)PAYLOAD_BASE;
 +        print("wifi-step 7: fw at %p: %x %x %x %x\n", img, img[0], img[1], img[2], img[3]);
++        /* (the MHI image's length and sum are looked at against the staged set's in op13_wifi_mhi_prepare,
++         * which says which set it found) */
 +        /* check the BHI registers: only if the link is up */
 +        {
 +            uint32_t link = *(volatile uint32_t *)0x40000080;

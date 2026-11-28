@@ -45,6 +45,22 @@ fi
 cp launcher/hackios.py launcher/run.sh launcher/run.bat "$DIR/"
 chmod +x "$DIR/run.sh"
 
+# the data volume (docs/data-persistence.md): iOS keeping /private/var in Android's /data from boot to
+# boot -- and, the same way, the system image on the phone, so that a boot does not upload 2.4 GB. The five
+# scripts at the root, and what they run out of tools/ -- the Python front-end and its helpers, and the
+# phone-side tool built by tools/hakios-pin/build.sh (a static ARM64 program).
+cp data-create.sh data-boot.sh data-delete.sh system-create.sh system-delete.sh "$DIR/"
+chmod +x "$DIR"/data-*.sh "$DIR"/system-*.sh
+mkdir -p "$DIR/tools/hakios-pin"
+cp tools/hakios-data.py tools/hakios-send.py tools/hakios-volread.py tools/hakios_adblink.py tools/hakios-datavol.py \
+	"$DIR/tools/"
+if [ -f tools/hakios-pin/hakios-pin ]; then
+	cp tools/hakios-pin/hakios-pin "$DIR/tools/hakios-pin/"
+else
+	echo "package.sh: no tools/hakios-pin/hakios-pin -- the zip's data-*.sh and system-*.sh" >&2
+	echo "          will not work (tools/hakios-pin/build.sh makes it: clang and lld, or the build container)" >&2
+fi
+
 # the WCN7850's firmware, which the launcher stages for the loader's MHI download: both revisions an
 # OnePlus 13 carries (peach and peach_v2) are in the one image, and the loader downloads the chip's own
 # (it reads the revision off the chip, at the link step). It must sit beside hackios.py or the zip
@@ -87,6 +103,28 @@ iOS boots in about two minutes; the touch screen, the speakers, Wi-Fi, Bluetooth
 the flashlight work. The session ends after SECS seconds (the screen then freezes --
 that is the session ending, not a hang; python3 hackios.py stop ends it early,
 fastboot reboot leaves). The kernel and iOS are never installed to the phone.
+
+KEEPING WHAT iOS MAKES (music, photos, everything of its own) FROM BOOT TO BOOT: the data volume.
+By default iOS starts with an empty /private/var every time. The data volume is a disk of iOS's own
+that lives in Android's /data -- a pinned file whose blocks the loader gives iOS as a block
+device -- made once and kept. Linux; the phone in Android with USB debugging AND root (adb shell su);
+adb in PATH:
+  sudo apt install hfsprogs              once: mkfs.hfsplus makes the volume's HFS Plus file system
+  ./data-create.sh [SIZE]                once: 64G by default (a whole number of MiB); takes minutes
+  ./data-boot.sh [SECS]                  every boot with the data kept (900 s by default)
+  ./data-delete.sh                       when its space is wanted back: everything on it goes
+  python3 tools/hakios-data.py list      the volumes there are
+  python3 tools/hakios-data.py look      what the volume holds, without booting iOS
+Nothing else of Android's is touched: the volume is a file Android cannot read, and a factory reset
+removes it. Each boot reads where Android keeps the volume's blocks right before leaving Android, and
+the loader refuses the volume if they have moved -- so Android's own data is never written over.
+iOS without the volume (./run.sh) is as before.
+
+WITHOUT THE SYSTEM IMAGE UPLOAD (2.4 GB, a minute at every boot):
+  ./system-create.sh                     once per build: the system image on the phone, the same way
+  ./system-delete.sh                     it off again: data-boot.sh uploads as before
+data-boot.sh checks at every boot that the image on the phone is the one beside the scripts (by
+its SHA-256) and uploads it when it is not.
 EOF
 
 # the zip: python's own zipfile (deflated) -- no dependence on the Info-ZIP binary,

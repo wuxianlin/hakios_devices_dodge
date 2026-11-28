@@ -14,5 +14,10 @@ usb-payload.bin
 !fw-wifi/peach/**
 !fw-wifi/peach_v2/**
 !fw-wifi/combined.bin
+# the built phone-side tool, and the map of each data volume as it was made (tools/hakios-data.py create writes it)
+tools/hakios-pin/hakios-pin
+*.map
+# what the system image summed to, kept between boots (tools/hakios-data.py)
+.hakios-sha256.json
 
 fw-wifi/network

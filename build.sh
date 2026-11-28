@@ -8,6 +8,7 @@
 # HAKIOS_MU=<a Mu-Silicium tree with this port in it, built elsewhere>: the UEFI volume, BootShim and mkbootimg
 # are taken from it (it is linked as kernel/Mu-Silicium) instead of the tree docker/build.sh uefi would clone.
 #   1. kernel + loader         docker/build.sh (the container compiles both)
+#   1b. hakios-pin             the data volume's phone-side tool (tools/hakios-pin/build.sh)
 #   2. firmware in place       the repository's fw-* directories copied to the tree
 #   3. images                  the IPSW unpacked into the tree the first time (docker/build.sh unpack), then
 #                              make images (GL=1 REST=1, as the CI: Mesa, and the rest of our programs)
@@ -39,6 +40,22 @@ fi
 echo "== the kernel and the loader"
 "$REPO/docker/build.sh"
 "$REPO/docker/build.sh" loader
+
+echo "== the data volume's phone-side tool (tools/hakios-pin/hakios-pin)"
+# a static ARM64 program with nothing from libc (tools/hakios-pin/hakios-pin.c), made by its build.sh: in the
+# build container when it is up, else with this computer's clang and lld. What it says is kept whole in the
+# log, and a failure ends the build: the package would carry data-*.sh with no tool under them.
+PIN="$REPO/tools/hakios-pin/hakios-pin"
+if [ ! -f "$PIN" ] || [ "$REPO/tools/hakios-pin/hakios-pin.c" -nt "$PIN" ] || [ "$REPO/tools/hakios-pin/build.sh" -nt "$PIN" ]; then
+	mkdir -p "$TREE/logs"
+	if "$REPO/tools/hakios-pin/build.sh" > "$TREE/logs/hakios-pin.log" 2>&1; then
+		ls -la "$PIN"
+	else
+		echo "build.sh: hakios-pin was not built -- the last of $TREE/logs/hakios-pin.log:" >&2
+		tail -20 "$TREE/logs/hakios-pin.log" >&2
+		exit 1
+	fi
+fi
 
 echo "== the firmware in place"
 for d in fw-gpu fw-audio fw-bt fw-wifi fw-video; do

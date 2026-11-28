@@ -1,3 +1,156 @@
+diff --git a/bsd/hfs/hfs_readwrite.c b/bsd/hfs/hfs_readwrite.c
+index 6a182c4..7ecc000 100644
+--- a/bsd/hfs/hfs_readwrite.c
++++ b/bsd/hfs/hfs_readwrite.c
+@@ -1653,6 +1653,120 @@ out_unlock:
+ /*
+  * Control filesystem operating characteristics.
+  */
++/* ---- FileProvider's sync root on HFS -------------------------------------------------------------- */
++/*
++ * FileProvider's LocalStorage extension -- the domain behind Files' "On My iPhone", and where
++ * Safari's downloads go -- marks its "File Provider Storage" directory as a sync root with APFS's
++ * fsctls and asks every item for its nearest sync-root ancestor; the extension and revisiond also
++ * send APFS's "mark purgeable" and "maintain directory stats". fileproviderd is given this volume as
++ * APFS (libhakios.fpvolume.dylib), so the calls arrive here, where HFS answered none of them (ENOTTY):
++ * the extension's root item did not exist, and a download had no destination (it stayed in Safari's
++ * own container). Answered as the ramfs of the REDMI K90 port answers them; the mark is an attribute
++ * of the directory, so it is where the directory is. (The numbers are APFS's ioctls: _IOx('J', n, T)
++ * with Darwin's IOC_IN 0x80000000 and IOC_OUT 0x40000000.)
++ */
++#define HFSIOC_APFS_MAINTAIN_DIR_STATS   0x80084A02ul    /* _IOW ('J',  2, uint64_t) */
++#define HFSIOC_APFS_MARK_PURGEABLE       0xC0084A44ul    /* _IOWR('J', 68, uint64_t) */
++#define HFSIOC_APFS_SET_SYNCROOT         0x80044A48ul    /* _IOW ('J', 72, uint32_t) */
++#define HFSIOC_APFS_GET_SYNCROOT         0x40044A48ul    /* _IOR ('J', 72, uint32_t) */
++#define HFSIOC_APFS_PARENT_SYNCROOT      0x40084A4Aul    /* _IOR ('J', 74, uint64_t) */
++#define HFS_SYNCROOT_NAME                "com.apple.hakios.syncroot"
++
++/* is VP a directory marked a sync root? 0 and *MARKED, or the attribute's error */
++static int
++hfs_syncroot_marked(vnode_t vp, int *marked)
++{
++	struct cnode *cp = VTOC(vp);
++	struct vnop_getxattr_args vga;
++	uio_t uio;
++	char byte = '0';
++	size_t size = 1;
++	int error;
++
++	*marked = 0;
++	if (!vnode_isdir(vp)) {
++		return 0;
++	}
++	if ((error = hfs_lock(cp, HFS_SHARED_LOCK, HFS_LOCK_DEFAULT)) != 0) {
++		return error;
++	}
++	uio = uio_create(1, 0, UIO_SYSSPACE, UIO_READ);
++	if (uio == NULL) {
++		hfs_unlock(cp);
++		return ENOMEM;
++	}
++	uio_addiov(uio, CAST_USER_ADDR_T(&byte), 1);
++	vga.a_desc = NULL;
++	vga.a_vp = vp;
++	vga.a_name = HFS_SYNCROOT_NAME;
++	vga.a_uio = uio;
++	vga.a_size = &size;
++	vga.a_options = 0;
++	vga.a_context = NULL;
++	error = hfs_getxattr_internal(cp, &vga, VTOHFS(vp), 0);
++	uio_free(uio);
++	hfs_unlock(cp);
++	if (error == ENOATTR) {
++		return 0;
++	}
++	if (error == 0) {
++		*marked = byte == '1';
++	}
++	return error;
++}
++
++/* VP marked a sync root, or unmarked (VALUE 0) */
++static int
++hfs_syncroot_set(vnode_t vp, uint32_t value, vfs_context_t ctx)
++{
++	struct cnode *cp = VTOC(vp);
++	struct vnop_setxattr_args vsa;
++	char byte = value ? '1' : '0';
++	int error;
++
++	if (!vnode_isdir(vp)) {
++		return ENOTDIR;
++	}
++	if ((error = hfs_lock(cp, HFS_EXCLUSIVE_LOCK, HFS_LOCK_DEFAULT)) != 0) {
++		return error;
++	}
++	vsa.a_desc = NULL;
++	vsa.a_vp = vp;
++	vsa.a_name = HFS_SYNCROOT_NAME;
++	vsa.a_uio = NULL;
++	vsa.a_options = 0;
++	vsa.a_context = ctx;
++	error = hfs_setxattr_internal(cp, &byte, 1, &vsa, VTOHFS(vp), 0);
++	hfs_unlock(cp);
++	return error;
++}
++
++/* the file id of the nearest proper ancestor of VP that is a sync root, 0 when there is none */
++static uint64_t
++hfs_syncroot_ancestor(vnode_t vp)
++{
++	vnode_t at, parent;
++	uint64_t found = 0;
++	int marked = 0;
++
++	if ((at = vnode_getparent(vp)) == NULLVP) {
++		return 0;
++	}
++	for (;;) {
++		if (hfs_syncroot_marked(at, &marked) == 0 && marked) {
++			found = VTOC(at)->c_fileid;
++			break;
++		}
++		parent = vnode_getparent(at);
++		vnode_put(at);
++		if (parent == NULLVP) {
++			break;
++		}
++		at = parent;
++	}
++	return found;
++}
++
+ int
+ hfs_vnop_ioctl( struct vnop_ioctl_args /* {
+ 		vnode_t a_vp;
+@@ -3072,6 +3186,27 @@ fail_change_next_allocation:
+ 	case FSIOC_CAS_BSDFLAGS:
+ 		return hfs_cas_bsdflags(hfsmp, vp, ap);
+ 
++	case HFSIOC_APFS_MARK_PURGEABLE:
++	case HFSIOC_APFS_MAINTAIN_DIR_STATS:
++		return 0;
++
++	case HFSIOC_APFS_SET_SYNCROOT:
++		return hfs_syncroot_set(vp, *(uint32_t *)ap->a_data, context);
++
++	case HFSIOC_APFS_GET_SYNCROOT: {
++		int marked = 0;
++		int marked_error = hfs_syncroot_marked(vp, &marked);
++
++		if (marked_error == 0) {
++			*(uint32_t *)ap->a_data = marked != 0;
++		}
++		return marked_error;
++	}
++
++	case HFSIOC_APFS_PARENT_SYNCROOT:
++		*(uint64_t *)ap->a_data = hfs_syncroot_ancestor(vp);
++		return 0;
++
+ 	default:
+ 		return (ENOTTY);
+ 	}
 diff --git a/osfmk/arm/io_map.c b/osfmk/arm/io_map.c
 index 18ef2f0..36cd054 100644
 --- a/osfmk/arm/io_map.c

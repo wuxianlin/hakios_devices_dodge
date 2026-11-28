@@ -85,6 +85,15 @@ jobs:
           # loader looks for each revision's bytes where the table says, in the one image the host stages
           python3 devices/dodge/tools/compose_combined.py --check .
 
+      # ---- the data volume's phone-side tool: a static ARM64 program with nothing from libc (the file in ----
+      # ---- Android's /data whose blocks the loader gives iOS as its data disk: tools/hakios-pin/hakios-pin.c) ----
+
+      - name: hakios-pin (the data volume's phone-side tool)
+        run: |
+          cd hackios/devices/dodge                   # the tree's copy of this repository, where package.sh runs: the
+          ./tools/hakios-pin/build.sh                # copy was made before this step, so it is built there (the runner's
+          file tools/hakios-pin/hakios-pin           # own clang and lld: llvm-20's where installed)
+
       # ---- the ath12k object: FreeBSD's LinuxKPI pulled from FreeBSD's own archive; cached ----
 
       - name: restore the ath12k object (cache)
@@ -278,6 +287,9 @@ jobs:
           # without the WCN7850's image beside the launcher, the zip boots without the Wi-Fi bring-up
           python3 -m zipfile -l devices/dodge/dist/hakios-dodge-*.zip | grep -q -E '/combined\.bin[[:space:]]' \
             || { echo '--- the zip has no combined.bin: it would boot without the Wi-Fi bring-up'; exit 1; }
+          # without the data volume's phone-side tool, the zip's data-*.sh and system-*.sh cannot run
+          python3 -m zipfile -l devices/dodge/dist/hakios-dodge-*.zip | grep -q -E '/tools/hakios-pin/hakios-pin[[:space:]]' \
+            || { echo '--- the zip has no hakios-pin: its data-*.sh and system-*.sh would not work'; exit 1; }
 
       # ---- publish: one artifact, and the same zip on a tag ----
 
