@@ -29,7 +29,7 @@ Seen working on the phone, November 2026 (one line per area, the same words as `
 | Torch | **Works** | The flashlight from the camera driver's rails (`torch=3`) |
 | CPU | Partial | Four cores by default (the proven boot); all eight have been booted (`cpus=8`) |
 | Sensors | Partial | The alert slider; no others yet |
-| Storage | Missing | UFS not brought up; the system runs from RAM |
+| Storage | Missing | UFS not brought up; the system runs from RAM. Files' **On My iPhone** lives on that memory filesystem: the local storage provider's executable is in the image, fileproviderd takes /private/var as the volume of its domains, and the filesystem answers what FileProvider asks of it -- lost at power-off |
 | Camera | Partial | The video half works: the Iris VPU decodes H.264/HEVC (PAS 9, HFI Gen2, the VideoToolbox plugin); the still camera itself (the ISP pipeline, the sensors) is not brought up |
 | Cellular | Missing | The modem is not started; `soc.args` carries the IPA addresses for when it is |
 | Haptic | **Works** | The PMIH010x hv-haptics block over SPMI: iOS Actuator waveforms played directly (`haptic=4`), this phone's motor (7692 us, 2400 mV) |

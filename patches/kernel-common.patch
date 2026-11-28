@@ -13367,6 +13367,24 @@ index f13d3e9..0a77665 100755
  finally:
      os.unlink(kernel)
  print(f'{args.output}: {os.path.getsize(args.output)} bytes (shim {len(shim)}, uncompressed {len(blob)})')
+diff --git a/sysimage/select-system.py b/sysimage/select-system.py
+index 68dfd85..21a020d 100755
+--- a/sysimage/select-system.py
++++ b/sysimage/select-system.py
+@@ -149,6 +149,13 @@ def wanted_file(path, size):
+     if path.startswith(('Applications/', HEALTH)):
+         return not path.lower().endswith(SKIP_APP_EXT) and '.mlmodelc/' not in path
+     if path.startswith(FRAMEWORKS):
++        # an appex's own executable is the extension itself, and without it PlugInKit registers
++        # nothing: the local storage provider's (LocalStorageFileProvider, 8.6 MB) was dropped by the
++        # 4 MB framework cap, so fileproviderctl listed the iCloud Drive and Photos providers only and
++        # Files had no "On My iPhone" -- with it, and two of Files' "Recents" and "Save to Files", which
++        # the cap dropped too (four files, 24 MB); the providers that did register are small and were kept.
++        if re.search(r'\.appex/[^/.]+$', path):
++            return size <= 32 << 20 and '.mlmodelc/' not in path
+         if re.search(r'/(XPCServices|Support|Helpers)/', path):
+             return size <= 32 << 20 and not path.lower().endswith(('.png', '.car', '.loctable', '.caml'))
+         if path.endswith('.car'):
 diff --git a/tools/adhoc-sign.py b/tools/adhoc-sign.py
 new file mode 100644
 index 0000000..6817e1f
@@ -13608,7 +13626,7 @@ index 68decaa..124b5e4 100755
                  lines.append("%-40s optional %s" % (path, " ".join([d.tag] + tags)))
      return lines + [FILES_END]
 diff --git a/userland/build.sh b/userland/build.sh
-index c604123..fdf8ec6 100755
+index c604123..c1c5f88 100755
 --- a/userland/build.sh
 +++ b/userland/build.sh
 @@ -104,6 +104,11 @@ for d in rootfs cryptex cryptex-app; do
@@ -13641,15 +13659,17 @@ index c604123..fdf8ec6 100755
  # The programs (file names) started with a library of ours inside them: "LIBRARY NAME..." per line
  # (src/inject.c is libhakios.dylib, src/inject_sb.c is libhakios.sb.dylib, src/inject_media.c is
  # libhakios.media.dylib).
-@@ -136,6 +152,7 @@ SILEO_BIN="chmod cp mkdir mv rm"
+@@ -136,7 +152,9 @@ SILEO_BIN="chmod cp mkdir mv rm"
  INJECT=${INJECT-"/redwood/lib/libhakios.dylib backboardd containermanagerd containermanagerd_system
  /redwood/lib/libhakios.sb.dylib SpringBoard
  /redwood/lib/libhakios.media.dylib mediaserverd
 +/redwood/lib/libhakios.vt.dylib videocodecd mediaserverd com.apple.WebKit.GPU
  /redwood/lib/libhakios.app.dylib Sileo
++/redwood/lib/libhakios.fpvolume.dylib fileproviderd
  /redwood/lib/libhakios.tweaks.dylib Preferences"}
  mkdir -p obj
-@@ -163,7 +180,41 @@ fi
+ 
+@@ -163,7 +181,41 @@ fi
  rm -rf root
  mkdir -p root/sbin root/bin root/etc root/share root/LaunchDaemons
  cp obj/init root/sbin/init
@@ -13692,7 +13712,7 @@ index c604123..fdf8ec6 100755
  # The data volume into the flash and back (src/var_store.c), and the job that saves it when a run
  # ends: the program and its job together, away from the Darwin job list below, which several working
  # copies are editing at once.
-@@ -240,6 +291,10 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -240,6 +292,10 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  		# our library for inside stock Darwin programs (the jobs in INJECT are started with it)
  		$DYN -dynamiclib -install_name /redwood/lib/libhakios.dylib -framework CoreFoundation -framework IOKit -lobjc \
  			-o obj/libhakios.dylib src/inject.c
@@ -13703,7 +13723,14 @@ index c604123..fdf8ec6 100755
  		$DYN -dynamiclib -install_name /redwood/lib/libhakios.sb.dylib -framework CoreFoundation -framework CoreGraphics -framework IOKit -framework IOSurface -lobjc \
  			-o obj/libhakios.sb.dylib src/inject_sb.c
  		# ... the tweak loader of the package manager's prefix (src/inject_tweaks.c): it goes into a
-@@ -252,8 +307,15 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -249,11 +305,22 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+ 		# ... and inside an application, to say what killed it (src/inject_app.c)
+ 		$DYN -dynamiclib -install_name /redwood/lib/libhakios.app.dylib -lobjc \
+ 			-o obj/libhakios.app.dylib src/inject_app.c
++		# ... and inside fileproviderd: /private/var (the memory filesystem here) accepted by FileProvider
++		# as an APFS volume for its domains, without which Files has no On My iPhone
++		$DYN -dynamiclib -install_name /redwood/lib/libhakios.fpvolume.dylib -lobjc \
++			-o obj/libhakios.fpvolume.dylib src/inject_fpvolume.c
  		$DYN -O2 -dynamiclib -install_name /redwood/lib/libhakios.media.dylib -framework CoreFoundation -framework CoreMedia \
  			-framework CoreVideo -framework IOSurface -lobjc \
  			-o obj/libhakios.media.dylib src/inject_media.c src/camera_device.c src/camera_isp.c
@@ -13719,7 +13746,7 @@ index c604123..fdf8ec6 100755
  		# the plug-in Metal loads when the kernel names it (boot-arg metal=1): a device, its buffers and the libraries it reads
  		# (src/HakiosMetal.m, src/hakios_metallib.c; tools/metal-plugin-test.sh tries the same objects on a Mac)
  		# With hakios-metal (hakios-metal/ in this tree, `make ios` in it; or one beside this tree, or at HAKIOS_METAL=): buffers in
-@@ -303,7 +365,7 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -303,7 +370,7 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  				M2V_OBJS="../xnu-deps/build/m2v/out/frontend.o ../xnu-deps/build/m2v/out/libadreno_metal_bridge.a -framework CoreFoundation -lc++ -Wl,-dead_strip"
  				echo "build.sh: with UniXNU's Metal on Vulkan (metal_m2v=1)"
  			fi
@@ -13728,7 +13755,7 @@ index c604123..fdf8ec6 100755
  				-I$HM/include -o obj/HakiosMetal src/HakiosMetalCA.m $METAL_GPU $M2V_OBJS
  		else
  		$DYN -bundle -framework Foundation -framework Metal -lobjc -I$METAL_SRC -o obj/HakiosMetal $METAL_SRC/HakiosMetal.m \
-@@ -313,8 +375,22 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -313,8 +380,22 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  			# the OpenGL ES library, and the table of functions that hands CoreAnimation's calls to it
  			# (Mesa says beside the library what it was built from: one from other patches is built again)
  			M=../xnu-deps/build/mesa/out
@@ -13753,16 +13780,18 @@ index c604123..fdf8ec6 100755
  			./mkeagl.py src/eagl_slots.txt $M/gl.xml $M/exported-gl.txt src/eagl.c > obj/eagl_gen.h
  			$DYN -dynamiclib -install_name /redwood/lib/libhakios.gl.dylib -Iobj -framework CoreFoundation \
  				-framework IOKit -framework IOSurface -lobjc $M/libOSMesa.8.dylib -o obj/libhakios.gl.dylib \
-@@ -372,6 +448,8 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+@@ -372,7 +453,10 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  	mkdir -p root/lib
  	cp obj/libhakios.dylib obj/libhakios.sb.dylib root/lib/
  	[ -f obj/libhakios.media.dylib ] && cp obj/libhakios.media.dylib root/lib/     # (as with cpu_test)
 +	[ -f obj/libhakios.vt.dylib ] && cp obj/libhakios.vt.dylib root/lib/    # the VideoToolbox plugin (videocodecd
 +	                                                                       # and friends, the injector's table)
  	[ -f obj/libhakios.app.dylib ] && cp obj/libhakios.app.dylib root/lib/
++	[ -f obj/libhakios.fpvolume.dylib ] && cp obj/libhakios.fpvolume.dylib root/lib/    # fileproviderd's (On My iPhone)
  	[ -f obj/libhakios.tweaks.dylib ] && cp obj/libhakios.tweaks.dylib root/lib/
  	if [ -f obj/HakiosAudio ]; then
-@@ -465,7 +543,12 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
+ 		mkdir -p root/lib/HakiosAudio.driver
+@@ -465,7 +549,12 @@ if [ -d $DARWIN/rootfs/usr/lib ]; then
  	cp com.hakios.demo.plist com.hakios.wifi.plist root/LaunchDaemons/
  	VOLUME=""
  	[ -n "$FLASHBOOT" ] && [ -f $DARWIN/rootfs.slt ] && VOLUME="--root-volume $DARWIN/rootfs.slt"
@@ -13776,7 +13805,7 @@ index c604123..fdf8ec6 100755
  fi
  # firmware of the phone's own hardware, where somebody has pulled it from the phone's Android into ../fw-gpu
  # (it is the vendor's and never in the repository): the kernel's GPU bring-up, drivers/gpu/hakios.adreno.c, finds it in fw/
-@@ -486,7 +569,41 @@ if [ -f ../fw-wifi/wpss.mdt ]; then
+@@ -486,7 +575,41 @@ if [ -f ../fw-wifi/wpss.mdt ]; then
  	# so not in the repository; it goes where the firmware goes and the kernel reads it there (wifi_join=1)
  	rm -f root/fw/network
  	# SHARE=1: leave it out, for an image that is going to somebody else -- it is a passphrase
@@ -13819,7 +13848,7 @@ index c604123..fdf8ec6 100755
  fi
  # ... and the vibration motor's waveforms, the phone's /vendor/firmware/aw8697_haptic.bin, from ../fw-haptic
  # (drivers/haptic/hakios.haptic.c, haptic=3; 3.6 KB, the vendor's and not in the repository either)
-@@ -513,11 +630,23 @@ for tuned in ../fw-camera/com.qti.tuned.hakios_*.bin; do
+@@ -513,11 +636,23 @@ for tuned in ../fw-camera/com.qti.tuned.hakios_*.bin; do
  	../tools/camtuning.py "$tuned" "root/fw/camera-$sensor.isp" >/dev/null
  done
  # ... and with ADSP=1 the image of the audio DSP, from the same place into ../fw-audio (drivers/audio/hakios.adsp.c):
@@ -13846,7 +13875,7 @@ index c604123..fdf8ec6 100755
  fi
  # Firmware that is not there is otherwise silent at build time and speaks only much later, deep in a
  # device log -- "adreno: THE GPU IS NOT STARTED: the small image has no fw/a660_gmu.bin" cost a phone
-@@ -566,6 +695,10 @@ done
+@@ -566,6 +701,10 @@ done
  python3 ../tools/apfs/mkapfs.py -z --plain fw -o root.apfs redwood=root | tail -1
  [ -z "$CHECK" ] || ../tools/apfs/check-image.sh root.apfs redwood=root
  
@@ -13857,7 +13886,7 @@ index c604123..fdf8ec6 100755
  # --- the RAM part of a boot off the flash: FLASHBOOT=1 -> flashboot.apfs --------------------------------
  # With the Darwin volume on the phone's flash as the root, all that has to come from RAM is what is not
  # on it -- the two cryptexes, OS with the dyld shared cache and App -- and what starts the boot: three
-@@ -671,15 +804,16 @@ if [ -f $DARWIN/system.manifest ] && [ -f $CACHE/dyld_shared_cache_arm64 ] &&
+@@ -671,15 +810,30 @@ if [ -f $DARWIN/system.manifest ] && [ -f $CACHE/dyld_shared_cache_arm64 ] &&
  	fi
  	mv sysroot/sbin/launchd sysroot/sbin/launchd.darwin
  	cp obj/stage0 sysroot/sbin/launchd
@@ -13867,6 +13896,20 @@ index c604123..fdf8ec6 100755
 -	python3 mkhighrate.py sysroot
 -	# the audio DSP's firmware, the phone's own from ../fw-audio (never in the repository), where the kernel reads
 -	# it once the root is mounted (drivers/audio/hakios.adsp.c, adsp=1): 20 MB that do not fit beside GL=1 in the small image
++	# The local storage provider (com.apple.FileProvider.LocalStorage), the domain Files shows as
++	# "On My iPhone": its appex is in FileProvider.framework/PlugIns, and its own executable -- the
++	# extension itself, without which PlugInKit registers nothing -- is one of the four that
++	# select-system.py's 4 MB cap on framework files dropped. With the executable in the image
++	# (sysimage/select-system.py), the whole appex is put where the extensions that do register live
++	# as well: inside an application's PlugIns.
++	LOCALFP=sysroot/System/Library/Frameworks/FileProvider.framework/PlugIns/LocalStorageFileProvider.appex
++	if [ -d "$LOCALFP" ] && [ -f "$LOCALFP/LocalStorageFileProvider" ]; then
++		mkdir -p sysroot/Applications/Files.app/PlugIns
++		cp -a "$LOCALFP" sysroot/Applications/Files.app/PlugIns/
++		echo "  LocalStorageFileProvider.appex, its executable with it, into Files.app/PlugIns (On My iPhone)"
++	else
++		echo "build.sh: LocalStorageFileProvider.appex has no executable in this image: no On My iPhone" >&2
++	fi
 +	# the ADSP's firmware (the audio DSP and the battery's PMIC GLINK live on it:
 +	# drivers/power/hakios.battery_adsp.c, batt_dsp=4), from ../fw-audio into the system
 +	# image's /fw -- the small image's window cannot hold it beside GL=1, and the kernel's
@@ -14822,6 +14865,117 @@ index 217e8fa..79d649e 100644
  			if (buttons != NULL) {
  				send_button(buttons, &t);
  			}
+diff --git a/userland/src/inject_fpvolume.c b/userland/src/inject_fpvolume.c
+new file mode 100644
+index 0000000..4cf2901
+--- /dev/null
++++ b/userland/src/inject_fpvolume.c
+@@ -0,0 +1,105 @@
++/*
++ * libhakios.fpvolume.dylib, inserted into fileproviderd (etc/inject.conf): /private/var accepted as a
++ * volume for FileProvider's domains -- the LocalStorage domain is the "On My iPhone" of the Files
++ * application, and the place a download is given.
++ *
++ * fileproviderd keeps every domain on a volume it has accepted, and it accepts one only in
++ * -[FPDVolume initWithVolumeInfo:knownRole:volumeManager:] -- its "volumeInfo" is a const struct
++ * statfs * (type encoding r^{statfs=...}) --, which asks FPVolumeFPFSSupported
++ * (FileProvider.framework): read-write, local, not quarantined, and f_fstypename "apfs". The home
++ * volume is the one under /private/var/mobile. Here that is the memory filesystem this kernel puts
++ * on /private/var (it brings up no storage), so it is refused. -[FPDServer _setup] then goes on
++ * with no volume: fileproviderctl dump lists providers and no domain, Files has no "On My
++ * iPhone", and a download has nowhere to go.
++ *
++ * FileProviderDaemon reaches FPVolumeFPFSSupported and statfs_ext through the shared cache's direct
++ * branches, so neither can be interposed. The method that asks is replaced instead, and for
++ * /private/var it gets a copy of the statfs whose type reads "apfs"; the other three conditions are
++ * still checked on the real flags. LocalStorage is not an FPFS provider (-[FPDProvider _supportsFPFS]
++ * is NO for it), so its domain needs nothing else of APFS -- only what its extension asks of the
++ * volume's filesystem through fsctl(2) and fcntl(2), which the memory filesystem answers
++ * (xnu/files/bsd/miscfs/ramfs/ramfs.c).
++ *
++ * (The same fix the REDMI K90 port carries as libredwood-fpvolume.dylib, its inject_fpvolume.c.)
++ */
++#include <dlfcn.h>
++#include <objc/runtime.h>
++#include <pthread.h>
++#include <unistd.h>
++#include <stdio.h>
++#include <string.h>
++#include <sys/mount.h>
++
++typedef id (*init_with_statfs_t)(id, SEL, struct statfs *, unsigned, id);
++
++static init_with_statfs_t original;
++
++static id
++init_with_statfs(id self, SEL cmd, struct statfs *fs, unsigned role, id manager)
++{
++	struct statfs copy;
++
++	if (fs == NULL || (strcmp(fs->f_fstypename, "hfs") != 0 && strcmp(fs->f_fstypename, "ramfs") != 0) ||
++	    strcmp(fs->f_mntonname, "/private/var") != 0) {
++		return original(self, cmd, fs, role, manager);
++	}
++	copy = *fs;
++	strlcpy(copy.f_fstypename, "apfs", sizeof(copy.f_fstypename));
++	fprintf(stderr, "hakios-fpvolume: /private/var (%s) offered to FPDVolume as apfs, role %u\n", fs->f_fstypename, role);
++	return original(self, cmd, &copy, role, manager);
++}
++
++/* the class may not be in the process yet when this library is loaded (measured: an inserted
++ * library's constructor runs before the daemon has loaded FileProvider), so ask, load FileProvider,
++ * and if it is still not there, ask again from a thread of our own until it is */
++static int
++install_once(void)
++{
++	Class volume = objc_getClass("FPDVolume");
++	Method method;
++
++	if (volume == Nil) {
++		void *h = dlopen("/System/Library/PrivateFrameworks/FileProvider.framework/FileProvider", RTLD_NOW);
++
++		if (h == NULL) {
++			h = dlopen("/System/Library/Frameworks/FileProvider.framework/FileProvider", RTLD_NOW);
++		}
++		if (h == NULL) {
++			h = dlopen("/System/Library/PrivateFrameworks/FileProviderDaemon.framework/FileProviderDaemon", RTLD_NOW);
++		}
++		volume = objc_getClass("FPDVolume");
++	}
++	method = volume != Nil ? class_getInstanceMethod(volume, sel_registerName("initWithVolumeInfo:knownRole:volumeManager:")) : NULL;
++	if (method == NULL) {
++		return 0;
++	}
++	original = (init_with_statfs_t)method_setImplementation(method, (IMP)init_with_statfs);
++	fprintf(stderr, "hakios-fpvolume: -[FPDVolume initWithVolumeInfo:knownRole:volumeManager:] replaced\n");
++	return 1;
++}
++
++static void *
++wait_and_install(__unused void *argument)
++{
++	for (int i = 0; i < 600; i++) {          /* 30 s: the daemon's setup begins at once after this */
++		if (install_once()) {
++			return NULL;
++		}
++		usleep(50 * 1000);
++	}
++	fprintf(stderr, "hakios-fpvolume: FPDVolume never appeared, nothing replaced\n");
++	return NULL;
++}
++
++__attribute__((constructor)) static void
++fpvolume_start(void)
++{
++	pthread_t thread;
++
++	if (install_once()) {
++		return;
++	}
++	if (pthread_create(&thread, NULL, wait_and_install, NULL) != 0) {
++		fprintf(stderr, "hakios-fpvolume: no thread to wait for FPDVolume with\n");
++	}
++}
 diff --git a/userland/src/inject_sb.c b/userland/src/inject_sb.c
 index f847feb..ec733f5 100644
 --- a/userland/src/inject_sb.c
@@ -16189,6 +16343,280 @@ index 6ea04a7..0423413 100755
 -exec /usr/bin/$drv -include "$HB/../../hostinc/xnu_clang_compat.h" -target arm64-apple-ios${XNU_SDK_VERSION:-16.5} --ld-path="$HB/ld64" \
 +exec $drv -include "$HB/../../hostinc/xnu_clang_compat.h" -target arm64-apple-ios${XNU_SDK_VERSION:-16.5} --ld-path="$HB/ld64" \
    -w "${extra[@]}" "${args[@]}"
+diff --git a/xnu/files/bsd/miscfs/ramfs/ramfs.c b/xnu/files/bsd/miscfs/ramfs/ramfs.c
+index bba5dd1..2638c2c 100644
+--- a/xnu/files/bsd/miscfs/ramfs/ramfs.c
++++ b/xnu/files/bsd/miscfs/ramfs/ramfs.c
+@@ -31,6 +31,7 @@
+ #include <sys/dirent.h>
+ #include <sys/errno.h>
+ #include <sys/fcntl.h>
++#include <sys/fsctl.h>
+ #include <sys/mount_internal.h>
+ #include <sys/namei.h>
+ #include <sys/proc.h>
+@@ -78,6 +79,9 @@ struct ramfs_node {
+ 	uid_t               rn_uid;
+ 	gid_t               rn_gid;
+ 	uint32_t            rn_bsdflags;
++	uint32_t            rn_docid;           /* ATTR_CMN_DOCUMENT_ID: given when UF_TRACKED is first set on the node, 0 before */
++	uint32_t            rn_write_gen;       /* ATTR_CMN_GEN_COUNT of a file: one more for each change of its content; 0 until the first */
++	uint32_t            rn_iflags;          /* RAMFS_IF_SYNCROOT */
+ 	uint32_t            rn_nlink;
+ 	uint32_t            rn_state;
+ 	vnode_t             rn_vp;
+@@ -106,12 +110,14 @@ struct ramfs_node {
+ };
+ #define RAMFS_N_CREATING        0x1         /* a thread is in vnode_create() for this node */
+ #define RAMFS_N_WANTED          0x2         /* somebody sleeps on the node */
++#define RAMFS_IF_SYNCROOT       0x1         /* a FileProvider sync root (APFS fsctl 'J' 72) */
+ 
+ struct ramfs_mount {
+ 	mount_t             rm_mp;
+ 	lck_mtx_t           rm_lock;
+ 	struct ramfs_node  *rm_root;
+ 	uint64_t            rm_next_ino;
++	uint32_t            rm_next_docid;      /* the next document ID given (ramfs_track) */
+ 	uint64_t            rm_nodes;
+ 	uint64_t            rm_pages;           /* file pages in use */
+ 	uint64_t            rm_max_pages;
+@@ -133,6 +139,23 @@ extern int(**ramfs_vnodeop_p)(void *);
+ /* ------------------------------------------------------------------------ */
+ /* Nodes                                                                    */
+ 
++/*
++ * APFS and HFS give a node a document ID the first time UF_TRACKED is set on it: unique on the volume and kept
++ * with the node. revisiond's GSLibraryGetOrAllocateDocumentId sets UF_TRACKED and reads ATTR_CMN_DOCUMENT_ID back,
++ * and FileProvider's LocalStorage domain ("On My iPhone" of the Files application) does that for every item it
++ * makes. With the mount's lock held, after the flags changed.
++ */
++static void
++ramfs_track(struct ramfs_node *node)
++{
++	if ((node->rn_bsdflags & UF_TRACKED) && node->rn_docid == 0) {
++		node->rn_docid = node->rn_mount->rm_next_docid++;
++		if (node->rn_mount->rm_next_docid == 0) {
++			node->rn_mount->rm_next_docid = 1;
++		}
++	}
++}
++
+ static struct ramfs_node *
+ ramfs_node_alloc(struct ramfs_mount *rm, enum vtype type, struct vnode_attr *vap)
+ {
+@@ -162,6 +185,7 @@ ramfs_node_alloc(struct ramfs_mount *rm, enum vtype type, struct vnode_attr *vap
+ 		}
+ 		if (VATTR_IS_ACTIVE(vap, va_flags)) {
+ 			node->rn_bsdflags = vap->va_flags;
++			ramfs_track(node);
+ 			VATTR_SET_SUPPORTED(vap, va_flags);
+ 		}
+ 		if (VATTR_IS_ACTIVE(vap, va_create_time)) {
+@@ -343,6 +367,10 @@ ramfs_touch(struct ramfs_node *node, bool modified)
+ 	node->rn_ctime = now;
+ 	if (modified) {
+ 		node->rn_mtime = now;
++		/* the write generation of a file, as APFS and HFS keep it (ATTR_CMN_GEN_COUNT): 0 says "never written" */
++		if (node->rn_type != VDIR && ++node->rn_write_gen == 0) {
++			node->rn_write_gen = 1;
++		}
+ 	}
+ }
+ 
+@@ -969,6 +997,8 @@ ramfs_getattr(struct vnop_getattr_args *ap)
+ 	VATTR_RETURN(vap, va_gid, node->rn_gid);
+ 	VATTR_RETURN(vap, va_mode, node->rn_mode);
+ 	VATTR_RETURN(vap, va_flags, node->rn_bsdflags);
++	VATTR_RETURN(vap, va_document_id, node->rn_docid);
++	VATTR_RETURN(vap, va_write_gencount, node->rn_write_gen);
+ 	VATTR_RETURN(vap, va_create_time, node->rn_btime);
+ 	VATTR_RETURN(vap, va_access_time, node->rn_atime);
+ 	VATTR_RETURN(vap, va_modify_time, node->rn_mtime);
+@@ -1042,6 +1072,7 @@ ramfs_setattr(struct vnop_setattr_args *ap)
+ 	}
+ 	if (VATTR_IS_ACTIVE(vap, va_flags)) {
+ 		node->rn_bsdflags = vap->va_flags;
++		ramfs_track(node);
+ 		VATTR_SET_SUPPORTED(vap, va_flags);
+ 	}
+ 	if (VATTR_IS_ACTIVE(vap, va_create_time)) {
+@@ -1286,12 +1317,136 @@ ramfs_readlink(struct vnop_readlink_args *ap)
+ 	return uiomove(node->rn_target, (int)node->rn_size, ap->a_uio);
+ }
+ 
++/*
++ * hakios: what fsctl(2) and fcntl(2) hand down here of what Darwin asks of /private/var's filesystem, which
++ * fileproviderd is told is APFS (userland/src/inject_fpvolume.c) -- each answer the user land was found to
++ * need for FileProvider's LocalStorage domain, the "On My iPhone" of the Files application (the REDMI K90
++ * port's analysis of 2026-11-09; this phone's of 2026-11-26):
++ *
++ *   - FSIOC_CAS_BSDFLAGS, the compare-and-swap of a file's BSD flags: vfs_syscalls.c checks the caller's right to
++ *     change the flags and leaves the swap to the filesystem, as HFS and APFS do it. revisiond sets UF_TRACKED so on
++ *     every item the LocalStorage domain makes; without an answer "Downloads" cannot be made (ENOTTY).
++ *   - APFS's sync-root calls: 'J' 72 sets and reads the mark, 'J' 74 asks for the nearest ancestor that is one.
++ *     FileProvider takes a local, writable APFS volume for one able to host its domains: the LocalStorage domain
++ *     marks its "File Provider Storage" directory so and asks every item; without an answer its root item does not
++ *     exist. The mark is kept with the node.
++ *   - APFS's "mark purgeable" (_IOWR('J', 68, uint64_t)), which the extension and revisiond send: taken, kept
++ *     nowhere -- this RAM disk deletes nothing on its own.
++ *   - APFS's "maintain directory stats" ('J' 2, a uint64_t of flags), asked for a package before its identifier is
++ *     handed out (and for an empty file, a download's placeholder); kept nowhere, nothing is counted here. The query
++ *     for the statistics ('J' 32) is not answered: FileProvider then reads the directory, as libc's dirstat_np() does.
++ *   - F_FULLFSYNC and F_BARRIERFSYNC: what a mapping changed is brought into the file first, as fsync does.
++ * Everything else of APFS's ('J': snapshots, cloning a range ...) is ENOTSUP, what a program asking an APFS feature
++ * of a volume without it is prepared for. Nothing is read or written for it.
++ */
++#define RAMFS_APFSIOC_MAINTAIN_DIR_STATS _IOW('J', 2, uint64_t)
++#define RAMFS_APFSIOC_MARK_PURGEABLE    _IOWR('J', 68, uint64_t)
++#define RAMFS_APFSIOC_SET_SYNCROOT      _IOW('J', 72, uint32_t)
++#define RAMFS_APFSIOC_GET_SYNCROOT      _IOR('J', 72, uint32_t)
++#define RAMFS_APFSIOC_PARENT_SYNCROOT   _IOR('J', 74, uint64_t)
++
++/* The number of the nearest proper ancestor of vp that is a sync root, 0 when there is none. */
++static uint64_t
++ramfs_parent_syncroot(vnode_t vp)
++{
++	struct ramfs_node *node = RAMFS_NODE(vp), *dir = NULL;
++	vnode_t parent_vp = NULLVP;
++	uint64_t found = 0;
++
++	if (node->rn_type != VDIR) {
++		/* only a directory keeps its parent: a file's is the one it was reached through */
++		parent_vp = vnode_getparent(vp);
++		if (parent_vp == NULLVP) {
++			return 0;
++		}
++		dir = RAMFS_NODE(parent_vp);
++	}
++	lck_mtx_lock(&node->rn_mount->rm_lock);
++	if (dir == NULL) {
++		dir = node->rn_parent;         /* a proper ancestor: not the directory asked about */
++	}
++	for (struct ramfs_node *at = dir; at != NULL; at = at->rn_parent) {
++		if (at->rn_iflags & RAMFS_IF_SYNCROOT) {
++			found = at->rn_ino;
++			break;
++		}
++		if (at->rn_parent == at) {
++			break;                  /* the root is its own parent */
++		}
++	}
++	lck_mtx_unlock(&node->rn_mount->rm_lock);
++	if (parent_vp != NULLVP) {
++		vnode_put(parent_vp);
++	}
++	return found;
++}
++
++/* actual_flags reports the flags found; new_flags replaces them only when those are expected_flags. */
++static int
++ramfs_cas_bsdflags(struct ramfs_node *node, struct fsioc_cas_bsdflags *cas)
++{
++	lck_mtx_lock(&node->rn_mount->rm_lock);
++	cas->actual_flags = node->rn_bsdflags;
++	if (cas->actual_flags == cas->expected_flags) {
++		node->rn_bsdflags = cas->new_flags;
++		ramfs_track(node);
++		ramfs_touch(node, false);
++	}
++	lck_mtx_unlock(&node->rn_mount->rm_lock);
++	return 0;
++}
++
+ static int
+-ramfs_ioctl(__unused struct vnop_ioctl_args *ap)
++ramfs_ioctl(struct vnop_ioctl_args *ap)
+ {
++	struct ramfs_node *node = RAMFS_NODE(ap->a_vp);
++
++	if (ap->a_command == FSIOC_CAS_BSDFLAGS) {
++		return ramfs_cas_bsdflags(node, (struct fsioc_cas_bsdflags *)ap->a_data);
++	}
++	if (ap->a_command == F_FULLFSYNC || ap->a_command == F_BARRIERFSYNC) {
++		ramfs_sync_mapping(ap->a_vp, node);
++		return 0;
++	}
++	if (ap->a_command == RAMFS_APFSIOC_MARK_PURGEABLE || ap->a_command == RAMFS_APFSIOC_MAINTAIN_DIR_STATS) {
++		return 0;
++	}
++	switch (ap->a_command) {
++	case RAMFS_APFSIOC_SET_SYNCROOT:
++		if (node->rn_type != VDIR) {
++			return ENOTDIR;
++		}
++		lck_mtx_lock(&node->rn_mount->rm_lock);
++		if (*(uint32_t *)ap->a_data != 0) {
++			node->rn_iflags |= RAMFS_IF_SYNCROOT;
++		} else {
++			node->rn_iflags &= ~RAMFS_IF_SYNCROOT;
++		}
++		ramfs_touch(node, false);
++		lck_mtx_unlock(&node->rn_mount->rm_lock);
++		return 0;
++	case RAMFS_APFSIOC_GET_SYNCROOT:
++		*(uint32_t *)ap->a_data = (node->rn_iflags & RAMFS_IF_SYNCROOT) != 0;
++		return 0;
++	case RAMFS_APFSIOC_PARENT_SYNCROOT:
++		*(uint64_t *)ap->a_data = ramfs_parent_syncroot(ap->a_vp);
++		return 0;
++	default:
++		break;
++	}
++	if (IOCGROUP(ap->a_command) == 'J') {
++		return ENOTSUP;
++	}
+ 	return ENOTTY;
+ }
+ 
++static int
++ramfs_fsync(struct vnop_fsync_args *ap)
++{
++	ramfs_sync_mapping(ap->a_vp, RAMFS_NODE(ap->a_vp));
++	return 0;
++}
++
+ /* Last reference gone: a node without a name has no reason to linger in the vnode cache. */
+ static int
+ ramfs_inactive(struct vnop_inactive_args *ap)
+@@ -1681,7 +1836,7 @@ const struct vnodeopv_entry_desc ramfs_vnodeop_entries[] = {
+ 	{ .opve_op = &vnop_read_desc, .opve_impl = (VOPFUNC)ramfs_read },
+ 	{ .opve_op = &vnop_write_desc, .opve_impl = (VOPFUNC)ramfs_write },
+ 	{ .opve_op = &vnop_ioctl_desc, .opve_impl = (VOPFUNC)ramfs_ioctl },
+-	{ .opve_op = &vnop_fsync_desc, .opve_impl = (VOPFUNC)nop_fsync },
++	{ .opve_op = &vnop_fsync_desc, .opve_impl = (VOPFUNC)ramfs_fsync },
+ 	{ .opve_op = &vnop_remove_desc, .opve_impl = (VOPFUNC)ramfs_remove },
+ 	{ .opve_op = &vnop_link_desc, .opve_impl = (VOPFUNC)ramfs_link },
+ 	{ .opve_op = &vnop_rename_desc, .opve_impl = (VOPFUNC)ramfs_rename },
+@@ -1727,6 +1882,7 @@ ramfs_mount(mount_t mp, __unused vnode_t devvp, __unused user_addr_t data, __unu
+ 	lck_mtx_init(&rm->rm_lock, &ramfs_lck_grp, LCK_ATTR_NULL);
+ 	rm->rm_mp = mp;
+ 	rm->rm_next_ino = RAMFS_ROOT_INO + 1;
++	rm->rm_next_docid = 1;
+ 	/* a runaway writer must not be able to take the whole machine: a quarter of memory at most */
+ 	rm->rm_max_pages = (max_mem / 4) / PAGE_SIZE;
+ 
+@@ -1874,7 +2030,9 @@ ramfs_vfs_getattr(mount_t mp, struct vfs_attr *fsap, __unused vfs_context_t ctx)
+ 		     * package installed under the prefix was "Unable to register", with nothing tried on its files.
+ 		     */
+ 		    VOL_CAP_FMT_PERSISTENTOBJECTIDS |
+-		    VOL_CAP_FMT_PATH_FROM_ID;
++		    VOL_CAP_FMT_PATH_FROM_ID |
++		    VOL_CAP_FMT_DOCUMENT_ID |
++		    VOL_CAP_FMT_WRITE_GENERATION_COUNT;
+ 		cap->capabilities[VOL_CAPABILITIES_INTERFACES] =
+ 		    VOL_CAP_INT_ADVLOCK |
+ 		    VOL_CAP_INT_FLOCK |
+@@ -1895,7 +2053,9 @@ ramfs_vfs_getattr(mount_t mp, struct vfs_attr *fsap, __unused vfs_context_t ctx)
+ 		    VOL_CAP_FMT_2TB_FILESIZE |
+ 		    VOL_CAP_FMT_OPENDENYMODES |
+ 		    VOL_CAP_FMT_HIDDEN_FILES |
+-		    VOL_CAP_FMT_PATH_FROM_ID;
++		    VOL_CAP_FMT_PATH_FROM_ID |
++		    VOL_CAP_FMT_DOCUMENT_ID |
++		    VOL_CAP_FMT_WRITE_GENERATION_COUNT;
+ 		cap->valid[VOL_CAPABILITIES_INTERFACES] =
+ 		    VOL_CAP_INT_SEARCHFS |
+ 		    VOL_CAP_INT_ATTRLIST |
 diff --git a/xnu/files/bsd/sys/hakios.input.h b/xnu/files/bsd/sys/hakios.input.h
 index bfb7d63..5a0bd63 100644
 --- a/xnu/files/bsd/sys/hakios.input.h
